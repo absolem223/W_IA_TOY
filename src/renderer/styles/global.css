@@ -1,0 +1,679 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Outfit:wght@300;400;600&display=swap');
+
+/*
+ * =============================================================
+ *  WIDGET IA — MOTION SYSTEM  (Living Stone × Quiet Precision)
+ * =============================================================
+ *
+ *  IDENTIDAD VISUAL
+ *  ────────────────
+ *  Living Stone : material, táctil, con peso y superficie.
+ *  Quiet Precision : frío, contenido, deliberado.
+ *  El widget existe como objeto físico en el escritorio del usuario,
+ *  no como elemento de UI flotante.
+ *
+ *
+ *  PRINCIPIOS IRRENUNCIABLES
+ *  ──────────────────────────
+ *  1. En reposo → casi invisible. El objeto existe pero no compite.
+ *  2. En interacción → preciso e intencional. Nunca instantáneo.
+ *  3. Nunca neon, nunca glow de color, nunca bounce exagerado.
+ *  4. Shadow = grounding físico, no decoración.
+ *  5. Border = frontera de material, no stroke gráfico.
+ *
+ *
+ *  ARQUITECTURA DE MOTION
+ *  ──────────────────────
+ *  Un solo reloj: --dur-idle (6000ms) gobierna el idle pulse.
+ *  Todo el sistema sincroniza a ese ritmo.
+ *
+ *  Jerarquía de easing:
+ *    --ease-micro  → precisión técnica (hover de botones, micro-states)
+ *    --ease-out    → salidas fluidas (paneles, reveals)
+ *    --ease-in-out → ciclos bidireccionales (idle pulse, typing)
+ *    --ease-spring → único easing con overshoot (arrivals, elevaciones)
+ *
+ *  Regla de acoplamiento:
+ *    box-shadow y transform se animan JUNTOS en idlePulse.
+ *    No separar. La sombra y la superficie son el mismo objeto.
+ *
+ *  Regla de timing múltiple:
+ *    opacity y transform PUEDEN tener duraciones distintas (intencional).
+ *    msgInOpacity (220ms) llega antes que msgInTransform (260ms).
+ *    El mensaje se vuelve visible antes de asentarse → ilusión de llegada.
+ *
+ *
+ *  REGLAS DE NO-REGRESIÓN
+ *  ──────────────────────
+ *  ✗  No agregar nuevas animaciones visibles en idle.
+ *  ✗  No modificar easings existentes sin auditoría de impacto.
+ *  ✗  No usar Math.random() en timing — toda variabilidad es determinística.
+ *  ✗  No agregar duraciones nuevas sin justificación perceptual documentada.
+ *  ✗  No aumentar opacidades de shadow por encima de --shadow-hover.
+ *  ✗  No usar pure black (rgba(0,0,0,...)) en ninguna capa.
+ *  ✗  No introducir colores de acento sobre 50% de saturación visible.
+ *
+ *
+ *  GUÍA DE USO PARA NUEVOS ELEMENTOS
+ *  ───────────────────────────────────
+ *  ¿Qué duración usar?
+ *    Micro-feedback (hover, active)     → --dur-micro  (80ms)
+ *    Respuesta de UI (focus, color)     → --dur-fast  (160ms)
+ *    Entrada/cambio de estado           → --dur-base  (240ms)
+ *    Transiciones de layout/panel       → --dur-slow  (380ms)
+ *    Idle / ritmo ambiental             → --dur-idle  (6000ms)
+ *
+ *  ¿Qué easing usar?
+ *    Botones, micro-states              → --ease-micro
+ *    Elementos que salen de pantalla    → --ease-out
+ *    Animaciones que van y vuelven      → --ease-in-out
+ *    Elementos que LLEGAN a posición    → --ease-spring
+ *
+ *  ¿Cómo animar un nuevo elemento?
+ *    transition: opacity var(--dur-base) var(--ease-out);
+ *    animation:  myKeyframe var(--dur-slow) var(--ease-out) both;
+ *    /* Si llega a una posición final → usar --ease-spring */
+ *    /* Si cicla indefinidamente     → usar --ease-in-out  */
+ *
+ *  ¿Cómo manejar idle vs. interacción?
+ *    [data-open="false"] → idle mode → idlePulse animation
+ *    [data-open="true"]  → active mode → static --shadow-base
+ *    Los puntos de sincronización de audio están en data-event=*
+ *
+ * =============================================================
+ */
+
+/* ─── Reset ─────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ─── Motion Vocabulary ──────────────────────────────────────────────
+
+   ESCALA BASE — uso general de UI:
+   --dur-micro  (80ms)   : active states, click feedback
+   --dur-fast  (160ms)   : hover, focus, color changes
+   --dur-base  (240ms)   : entradas, cambios de estado
+   --dur-slow  (380ms)   : paneles, reveals, layout
+
+   ESCALA DE CONTEXTO — ritmos perceptuales específicos:
+   --dur-msg-in  (260ms) : transform de entrada de mensaje
+                           (20ms más largo que --dur-base intencionalmente)
+   --dur-msg-fade (220ms): opacity de mensaje — termina 40ms ANTES que transform
+                           para crear ilusión de llegada progresiva
+   --dur-blink  (600ms)  : cursor streaming — dentro de rango 500-700ms
+                           percibido como "parpadeo natural" por el cerebro
+   --dur-typing (1000ms) : typing indicator — 1s es el ciclo natural
+                           de escritura humana
+
+   RELOJ DEL SISTEMA:
+   --dur-idle  (6000ms)  : el único ciclo ambiental. Shadow y transform
+                           sincronizan a este ritmo. No cambiar.
+                           100ms de diferencia → perceptible como delay.
+                           100% de diferencia  → perceptible como cambio de ritmo.
+
+   JERARQUÍA DE EASING:
+   --ease-micro   → precision, almost instant feel
+   --ease-out     → smooth exits, reveals
+   --ease-in-out  → bidirectional cycles (idle, typing)
+   --ease-spring  → ÚNICO con overshoot (Y > 1). Solo para arrivals.
+                    No usar en loops ni en transiciones de color/shadow.
+   ───────────────────────────────────────────────────────────────────── */
+:root {
+  --dur-micro:  80ms;
+  --dur-fast:   160ms;
+  --dur-base:   240ms;
+  --dur-slow:   380ms;
+  --dur-idle:   6000ms; /* 6s — un pulso, no una respiración */
+
+  --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out:  cubic-bezier(0.45, 0, 0.55, 1);
+  --ease-micro:   cubic-bezier(0.25, 0, 0, 1);
+  /* Easing signature del sistema: arrivals y elevaciones orgánicas.
+     Overshoot controlado — eje Y sale de [0,1] por diseño.         */
+  --ease-spring:  cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Duraciones de contexto — fuera de la escala base porque
+     cada una responde a ritmos perceptuales específicos.            */
+  --dur-msg-in:   260ms;   /* transform de entrada de mensaje */
+  --dur-msg-fade: 220ms;   /* opacity de entrada de mensaje (llega antes) */
+  --dur-blink:    600ms;   /* cursor de streaming — 500–700ms = ritmo natural */
+  --dur-typing:  1000ms;   /* typing bounce — 1s = ritmo humano de mecanografeo */
+
+  /* ─── Paleta — Dark Slate / Blue Undertones ──────────
+     Sin indigo, sin lavanda. Un azul pizarra desaturado
+     que recede en lugar de afirmarse.                    */
+  --bg-widget:    rgba(11, 13, 20, 0.92);
+  --bg-header:    rgba(14, 17, 27, 0.97);
+  --bg-chat:      rgba(9, 11, 17, 0.95);
+  --bg-user:      rgba(52, 72, 115, 0.70);  /* slate-blue, no indigo */
+  --bg-ai:        rgba(15, 18, 28, 0.97);
+  --bg-input:     rgba(16, 19, 29, 0.96);
+
+  /* Acento: azul pizarra muy muted — refleja, no brilla */
+  --accent:       #6B8CAE;
+  --accent-dark:  #4F6D8C;
+  --accent-rgb:   107, 140, 174;
+
+  --text:         #C8D4E8;   /* blanco con temperatura fría */
+  --muted:        #4E5E72;
+  --border:       rgba(90, 120, 165, 0.08);  /* softened — material boundary, not a stroke */
+  --border-focus: rgba(107, 140, 174, 0.32);
+
+  /* ─── Shape Language — asimetría sutil ───────────────
+     Arriba: más redondo (20/18). Abajo: más contenido (14/16).
+     Apenas perceptible — no llamativo.                   */
+  --radius-widget: 20px 18px 14px 16px;
+  --radius-lg:     16px;
+  --radius-md:     11px;
+  --radius-sm:     7px;
+
+  /* ─── Tipografía ─────────────────────────────────────
+     Inter para contenido funcional. Outfit para identidad. */
+  --font:          'Inter', system-ui, sans-serif;
+  --font-brand:    'Outfit', system-ui, sans-serif;
+
+  /* ─── Shadow System — 3-layer atmospheric model ────────
+     Sin negro puro. Color tonal slate/blue.
+     Layer 1: contact shadow  — cercano, corto
+     Layer 2: volume shadow   — difuso, atmosférico
+     Layer 3: bottom bounce   — rebote de luz, NO glow     */
+  --shadow-base:
+    0  6px  18px rgba(20, 30, 50, 0.18),
+    0 18px  60px rgba(20, 30, 50, 0.12),
+    0  4px  24px rgba(91, 141, 239, 0.05);
+
+  --shadow-hover:
+    0 10px  26px rgba(20, 30, 50, 0.20),
+    0 24px  80px rgba(20, 30, 50, 0.14),
+    0  6px  28px rgba(91, 141, 239, 0.06);
+
+  /* Idle: sub-perceptual — anchored only when looked for,
+     invisible in peripheral vision, zero footprint          */
+  --shadow-idle:
+    0  4px  14px rgba(20, 30, 50, 0.07),
+    0 10px  36px rgba(20, 30, 50, 0.05),
+    0  2px  18px rgba(91, 141, 239, 0.025);
+
+  /* Shadow settles rather than reacts — +40ms para percepción de peso */
+  --shadow-transition: box-shadow 320ms var(--ease-spring);
+
+  /* ─── Light-background variants ─────────────────────────
+     Misma estructura de 3 capas, misma curva tonal.
+     Opacidades escaladas ~1.8x para mantener consistencia
+     perceptual en fondos claros/medios.                    */
+  --shadow-idle-light:
+    0  4px  14px rgba(20, 30, 50, 0.13),
+    0 10px  36px rgba(20, 30, 50, 0.09),
+    0  2px  18px rgba(91, 141, 239, 0.04);
+
+  --shadow-base-light:
+    0  6px  18px rgba(20, 30, 50, 0.25),
+    0 18px  60px rgba(20, 30, 50, 0.17),
+    0  4px  24px rgba(91, 141, 239, 0.07);
+
+  --shadow-hover-light:
+    0 10px  26px rgba(20, 30, 50, 0.28),
+    0 24px  80px rgba(20, 30, 50, 0.19),
+    0  6px  28px rgba(91, 141, 239, 0.08);
+}
+
+/* ─── Root ───────────────────────────────────────────── */
+html, body, #root {
+  width: 100%; height: 100%;
+  background: transparent;
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+  color: var(--text);
+}
+
+/* ─── Widget Shell ───────────────────────────────────── */
+.widget {
+  position: relative;           /* necesario para el pseudo-element de noise */
+  isolation: isolate;           /* stacking context independiente             */
+  display: flex;
+  flex-direction: column;
+  width: 360px;
+  border-radius: var(--radius-widget);
+  background: var(--bg-widget);
+  backdrop-filter: blur(28px) saturate(140%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+  box-shadow: var(--shadow-base);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  /* Transiciones orgánicas.
+     box-shadow   : cambio de estado (idle/base/hover/light).
+     border-color : recalibración de tema — sincronizada con shadow.
+     transform    : snap-back al interrumpir idlePulse (0–0.8px max). */
+  transition:
+    var(--shadow-transition),
+    border-color var(--dur-slow) var(--ease-in-out),
+    transform    var(--dur-base) var(--ease-out);
+}
+
+/* Hover en estado activo: elevación espacial, no énfasis visual.
+   Percepción: el objeto se despega levemente de la superficie.   */
+.widget:hover {
+  box-shadow: var(--shadow-hover);
+}
+
+/* ─── Noise Texture ──────────────────────────────────── */
+/* Materialidad: superficie física. Opacidad 2.8% — al límite de
+   lo imperceptible. Solo se nota comparando con/sin.    */
+.widget::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  /* SVG feTurbulence inline — no requiere assets externos */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.80' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='256' height='256' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 256px 256px;
+  opacity: 0.028;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Todo el contenido del widget por encima del noise */
+.widget > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Inner rim diffusion — reduces hard-edge perception.
+   0.5px inner highlight a 3% de blanco.
+   Imperceptible sobre el contenido, efectivo solo en la
+   frontera del material donde suaviza la transición borde→fondo.
+   z-index alto pero opacity 0.03 → visualmente nulo sobre contenido. */
+.widget::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.03);
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Idle identity — el widget en reposo usa --shadow-idle.
+   La sombra pulsa entre idle (mínima) y un paso más hacia base.
+   En reposo: prácticamente invisible. El objeto existe, no interfiere. */
+.widget[data-open="false"] {
+  animation: idlePulse var(--dur-idle) var(--ease-in-out) infinite;
+}
+.widget[data-open="false"]:hover {
+  /* Hover en idle: sube a --shadow-base, no a hover —
+     el objeto se hace presente sin exagerar.          */
+  animation: none;
+  box-shadow: var(--shadow-base);
+}
+.widget[data-open="true"] {
+  animation: none;
+  box-shadow: var(--shadow-base);
+}
+
+/* ─── Light-background context ───────────────────────── */
+/* Activado via data-bg="light" (Widget.tsx, matchMedia).  */
+.widget[data-bg="light"] {
+  /* Border levemente más visible en fondos claros: 0.08 → 0.12.
+     Mantiene la regla: borde nunca dominante, siempre último en jerarquía. */
+  border-color: rgba(90, 120, 165, 0.12);
+}
+.widget[data-bg="light"][data-open="false"] {
+  animation-name: idlePulseLight;
+}
+.widget[data-bg="light"][data-open="false"]:hover {
+  animation: none;
+  box-shadow: var(--shadow-base-light);
+}
+.widget[data-bg="light"][data-open="true"] {
+  box-shadow: var(--shadow-base-light);
+}
+.widget[data-bg="light"]:hover {
+  box-shadow: var(--shadow-hover-light);
+}
+
+/* ─── Header / Drag Region ───────────────────────────── */
+.widget-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  height: 52px;
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag;
+  cursor: grab;
+  flex-shrink: 0;
+}
+.widget-header__brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  user-select: none;
+}
+
+/* Dot — pulso de opacidad, sin rebote. Sincronizado con idlePulse. */
+.widget-header__dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px rgba(var(--accent-rgb), 0.5);
+  animation: dotPulse var(--dur-idle) var(--ease-in-out) infinite;
+}
+
+.widget-header__title {
+  font-family: var(--font-brand);
+  font-size: 11.5px;
+  font-weight: 300;            /* ligero — el peso de Outfit 300 es perfecto aquí */
+  color: rgba(var(--accent-rgb), 0.85);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* Toggle button — no-drag region */
+.widget-toggle {
+  -webkit-app-region: no-drag;
+  width: 28px; height: 28px;
+  border-radius: var(--radius-sm);
+  background: rgba(var(--accent-rgb), 0.08);
+  border: 1px solid var(--border);
+  color: rgba(var(--accent-rgb), 0.75);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition:
+    background    var(--dur-fast) var(--ease-micro),
+    border-color  var(--dur-fast) var(--ease-micro),
+    color         var(--dur-fast) var(--ease-micro),
+    transform     var(--dur-fast) var(--ease-micro);
+}
+.widget-toggle:hover {
+  background: rgba(var(--accent-rgb), 0.18);
+  border-color: rgba(var(--accent-rgb), 0.25);
+  color: var(--accent);
+  transform: scale(1.08);
+}
+.widget-toggle:active {
+  transform: scale(0.94);
+  transition-duration: var(--dur-micro);
+}
+
+/* ─── Chat Panel ─────────────────────────────────────── */
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  height: 480px;
+  animation: panelReveal var(--dur-slow) var(--ease-out) both;
+}
+.chat-panel--closing {
+  animation: panelCollapse var(--dur-slow) var(--ease-in-out) both;
+  pointer-events: none;
+}
+
+/* ─── Message List ───────────────────────────────────── */
+.message-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg-chat);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--accent-rgb), 0.15) transparent;
+}
+.message-list::-webkit-scrollbar       { width: 3px; }
+.message-list::-webkit-scrollbar-thumb {
+  background: rgba(var(--accent-rgb), 0.15);
+  border-radius: 3px;
+}
+
+.message-list__empty {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+  margin-top: 24px;
+  letter-spacing: 0.01em;
+}
+
+/* ─── Message Bubbles ────────────────────────────────── */
+.message {
+  max-width: 84%;
+  contain: layout style;
+  /* spring easing + 60ms delay — el mensaje "llega", no aparece.
+     El delay crea percepción de intención sin latencia real.     */
+  animation:
+    msgInTransform var(--dur-msg-in)   var(--ease-spring) 60ms both,
+    msgInOpacity   var(--dur-msg-fade) ease-out           60ms both;
+}
+.message--user      { align-self: flex-end; }
+.message--assistant { align-self: flex-start; }
+
+/* Perceived thinking state — primer mensaje de respuesta recibe 120ms.
+   El adjacent sibling selector (+) captura exactamente el assistant
+   message que sigue a un user message, en cada intercambio.
+   animation-delay como propiedad separada override el shorthand
+   (ambas animaciones: transform y opacity comparten el mismo delay).
+   Mensajes subsiguientes mantienen 60ms del shorthand base.         */
+.message--user + .message--assistant {
+  animation-delay: 120ms, 120ms;
+}
+
+/* ─── Variabilidad temporal controlada ───────────────────
+   Ciclo determinístico: índice del mensaje % 3 → delay-v{0|1|2}.
+   Delta: 20ms por paso. Suficiente para evitar la percepción
+   mecánica en uso prolongado. Insuficiente para sentirse como lag.
+
+   Especificidad: 0-2-0 (clase + clase) — igual que el sibling rule.
+   Orden en cascada: estas reglas van DESPUÉS → ganan para assistant.
+
+   User messages:  50ms / 60ms / 70ms
+   Assistant (1st): 100ms / 120ms / 140ms                           */
+
+/* v0 — mínimo del rango */
+.message.delay-v0               { animation-delay:  50ms,  50ms; }
+.message--assistant.delay-v0    { animation-delay: 100ms, 100ms; }
+
+/* v1 — centro del rango (igual al base, explícito para documentación) */
+.message.delay-v1               { animation-delay:  60ms,  60ms; }
+.message--assistant.delay-v1    { animation-delay: 120ms, 120ms; }
+
+/* v2 — máximo del rango */
+.message.delay-v2               { animation-delay:  70ms,  70ms; }
+.message--assistant.delay-v2    { animation-delay: 140ms, 140ms; }
+
+.message__content {
+  font-size: 13px;
+  line-height: 1.65;
+  padding: 9px 13px;
+  border-radius: var(--radius-md);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.message--user .message__content {
+  background: var(--bg-user);
+  border-bottom-right-radius: 3px;
+}
+.message--assistant .message__content {
+  background: var(--bg-ai);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 3px;
+}
+
+/* Streaming cursor */
+.message--assistant.streaming .message__content::after {
+  content: '▋';
+  animation: cursorBlink var(--dur-blink) step-end infinite;
+  color: var(--accent);
+  font-size: 0.82em;
+  margin-left: 2px;
+  vertical-align: baseline;
+  opacity: 0.8;
+}
+
+/* ─── Typing Indicator ───────────────────────────────── */
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 10px 13px;
+  align-self: flex-start;
+}
+.typing-indicator span {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.35;
+  animation: typingBounce var(--dur-typing) var(--ease-in-out) infinite;
+}
+.typing-indicator span:nth-child(2) { animation-delay: 0.15s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.30s; }
+
+/* ─── Chat Input ─────────────────────────────────────── */
+.chat-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-header);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.chat-input__field {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  padding: 8px 12px;
+  outline: none;
+  transition:
+    border-color  var(--dur-fast) var(--ease-micro) 40ms,
+    box-shadow    var(--dur-fast) var(--ease-out)   40ms,
+    opacity       var(--dur-base) var(--ease-micro);  /* sin delay — streaming start es un estado intencional */
+}
+.chat-input__field::placeholder { color: var(--muted); }
+.chat-input__field:focus {
+  border-color: rgba(var(--accent-rgb), 0.45);
+  /* Ring reforzado: 0.35 (vs 0.12 anterior) — intención clara sin glow */
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.35);
+}
+.chat-input__field:disabled { opacity: 0.4; }
+
+.chat-input__send {
+  width: 30px; height: 30px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-dark);
+  border: none;
+  color: rgba(255,255,255,0.9);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition:
+    background var(--dur-fast) var(--ease-micro),
+    transform  var(--dur-fast) var(--ease-micro),
+    opacity    var(--dur-fast) var(--ease-micro);
+}
+.chat-input__send:hover:not(:disabled) {
+  background: var(--accent);
+  transform: scale(1.06);
+}
+.chat-input__send:active:not(:disabled) {
+  transform: scale(0.94);
+  transition-duration: var(--dur-micro);
+}
+.chat-input__send:disabled { opacity: 0.28; cursor: not-allowed; }
+
+/* ─── Utility ────────────────────────────────────────── */
+.no-drag { -webkit-app-region: no-drag; }
+
+/* ═══════════════════════════════════════════════════════
+   ANIMATIONS
+   ═══════════════════════════════════════════════════════ */
+
+/* Idle pulse — oscila entre shadow-idle y un punto intermedio.
+   Valores recalibrados: idle subperceptual, 50% a mitad de camino
+   hacia base. Jamás llega a --shadow-base.                        */
+@keyframes idlePulse {
+  0%, 100% {
+    /* --shadow-idle: sub-perceptual (nuevo) */
+    transform: translateY(0px);
+    box-shadow:
+      0  4px  14px rgba(20, 30, 50, 0.07),
+      0 10px  36px rgba(20, 30, 50, 0.05),
+      0  2px  18px rgba(91, 141, 239, 0.025);
+  }
+  50% {
+    /* Midpoint proporcional entre idle y --shadow-base */
+    /* 0.8px — por debajo del umbral de detección consciente */
+    transform: translateY(0.8px);
+    box-shadow:
+      0  5px  16px rgba(20, 30, 50, 0.10),
+      0 14px  46px rgba(20, 30, 50, 0.07),
+      0  3px  21px rgba(91, 141, 239, 0.035);
+  }
+}
+
+/* Dot pulse — opacidad solamente, sin scale, sin blur.
+   La dot "late" una vez cada 6s — perceptible pero no ansioso. */
+@keyframes dotPulse {
+  0%, 100% { opacity: 0.45; box-shadow: 0 0 4px  rgba(var(--accent-rgb), 0.4); }
+  50%       { opacity: 1.00; box-shadow: 0 0 10px rgba(var(--accent-rgb), 0.7); }
+}
+
+/* Panel reveal */
+@keyframes panelReveal {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+/* Panel collapse */
+@keyframes panelCollapse {
+  from { opacity: 1; transform: translateY(0);    }
+  to   { opacity: 0; transform: translateY(-6px); }
+}
+
+/* Message in — split en transform + opacity para timing independiente.
+   translateY(4px) — más sutil que 8px (intención, no caida).
+   scale(0.995)    — al límite de la percepción (no pop, no UI).  */
+@keyframes msgInTransform {
+  from { transform: translateY(4px) scale(0.995); }
+  to   { transform: translateY(0px) scale(1);     }
+}
+@keyframes msgInOpacity {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Typing bounce — orgánico, stagger natural */
+@keyframes typingBounce {
+  0%, 70%, 100% { transform: translateY(0);   opacity: 0.30; }
+  35%            { transform: translateY(-5px); opacity: 0.85; }
+}
+
+/* Idle pulse — light background variant.
+   Misma forma de onda, opacidades escaladas para
+   mantener grounding perceptual en fondos claros.    */
+@keyframes idlePulseLight {
+  0%, 100% {
+    transform: translateY(0px);
+    box-shadow:
+      0  4px  14px rgba(20, 30, 50, 0.13),
+      0 10px  36px rgba(20, 30, 50, 0.09),
+      0  2px  18px rgba(91, 141, 239, 0.04);
+  }
+  50% {
+    transform: translateY(0.8px);
+    box-shadow:
+      0  5px  16px rgba(20, 30, 50, 0.18),
+      0 14px  46px rgba(20, 30, 50, 0.13),
+      0  3px  21px rgba(91, 141, 239, 0.055);
+  }
+}
+
+/* Streaming cursor blink */
+@keyframes cursorBlink {
+  0%, 100% { opacity: 0.8; }
+  50%       { opacity: 0;   }
+}

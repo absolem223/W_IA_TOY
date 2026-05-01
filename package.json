@@ -1,0 +1,52 @@
+{
+  "name": "widget-ia-toy",
+  "version": "0.1.0",
+  "private": true,
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit",
+    "build:local": "electron-vite build && electron-builder --dir",
+    "build:preview": "electron-vite build && electron-builder --dir && start \"\" \"dist\\win-unpacked\\Widget IA Toy.exe\""
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.1",
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "electron-vite": "^2.3.0",
+    "typescript": "^5.5.4"
+  },
+  "build": {
+    "appId": "com.widget-ia.toy",
+    "productName": "Widget IA Toy",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*",
+      "resources/**/*"
+    ],
+    "extraResources": [
+      { "from": ".env", "to": ".env", "filter": ["**/*"] }
+    ],
+    "win": {
+      "icon": "resources/icon.png",
+      "target": [{ "target": "dir" }]
+    },
+    "mac": {
+      "icon": "resources/icon.png",
+      "target": [{ "target": "dir" }]
+    },
+    "linux": {
+      "icon": "resources/icon.png",
+      "target": [{ "target": "dir" }]
+    }
+  }
+}
