@@ -5,27 +5,41 @@
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
+    "dev:app": "electron-vite dev",
+    "proxy": "node proxy/index.js",
+    "setup:whisper": "powershell -ExecutionPolicy Bypass -File scripts/setup-whisper.ps1",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit",
+    "test:cognitive": "tsc -p tsconfig.cognitive.json && node out-cognitive/tests/cognitive/core.test.js && node out-cognitive/tests/cognitive/observability.test.js && node out-cognitive/tests/cognitive/metacognition.test.js && node out-cognitive/tests/cognitive/stability.test.js && node out-cognitive/tests/cognitive/selfknowledge.test.js && node out-cognitive/tests/cognitive/recovery.test.js && node out-cognitive/tests/cognitive/hardening.test.js",
+    "test:cognitive-devtools": "tsc -p tsconfig.cognitive-devtools.json && node out-cognitive-devtools/tests/cognitive-devtools/transport.test.js",
     "build:local": "electron-vite build && electron-builder --dir",
-    "build:preview": "electron-vite build && electron-builder --dir && start \"\" \"dist\\win-unpacked\\Widget IA Toy.exe\""
+    "build:preview": "electron-vite build && electron-builder --dir && start \"\" \"dist\\win-unpacked\\Argos.exe\"",
+    "rebuild": "electron-builder install-app-deps",
+    "clean-install": "rimraf node_modules package-lock.json && npm install && npm run rebuild",
+    "doctor": "node scripts/doctor.js"
   },
   "dependencies": {
+    "@xyflow/react": "^12.10.2",
+    "better-sqlite3": "12.10.0",
+    "dotenv": "^17.4.2",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "recharts": "^3.8.1",
+    "zustand": "^5.0.13"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.1",
-    "electron": "^31.0.0",
+    "electron": "31.0.0",
     "electron-builder": "^24.13.3",
     "electron-vite": "^2.3.0",
     "typescript": "^5.5.4"
   },
   "build": {
-    "appId": "com.widget-ia.toy",
-    "productName": "Widget IA Toy",
+    "appId": "com.argos.widget",
+    "productName": "Argos",
     "directories": {
       "output": "dist"
     },
@@ -34,19 +48,48 @@
       "resources/**/*"
     ],
     "extraResources": [
-      { "from": ".env", "to": ".env", "filter": ["**/*"] }
+      {
+        "from": "vendor/whisper",
+        "to": "whisper",
+        "filter": [
+          "**/*"
+        ]
+      }
     ],
     "win": {
-      "icon": "resources/icon.png",
-      "target": [{ "target": "dir" }]
+      "icon": "resources/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Argos",
+      "runAfterFinish": true
     },
     "mac": {
       "icon": "resources/icon.png",
-      "target": [{ "target": "dir" }]
+      "target": [
+        {
+          "target": "dir"
+        }
+      ]
     },
     "linux": {
       "icon": "resources/icon.png",
-      "target": [{ "target": "dir" }]
+      "target": [
+        {
+          "target": "dir"
+        }
+      ]
     }
   }
 }

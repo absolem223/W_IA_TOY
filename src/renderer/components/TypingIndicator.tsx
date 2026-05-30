@@ -1,11 +1,21 @@
 import React from 'react'
 
-export function TypingIndicator(): React.ReactElement {
+interface Props {
+  status?: string
+}
+
+export function TypingIndicator({ status }: Props): React.ReactElement {
   return (
-    <div className="typing-indicator" aria-label="IA escribiendo…">
-      <span />
-      <span />
-      <span />
+    <div className="typing-indicator" aria-label={status || 'Pensando…'}>
+      {status ? (
+        <span className="cognitive-status-text">{status}</span>
+      ) : (
+        <>
+          <span />
+          <span />
+          <span />
+        </>
+      )}
     </div>
   )
 }

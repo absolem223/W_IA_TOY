@@ -1,6 +1,10 @@
 import React from 'react'
 import { Widget } from './components/Widget'
+import { CognitiveDevToolsConsole } from '../cognitive-devtools/CognitiveDevToolsConsole'
 
 export default function App(): React.ReactElement {
-  return <Widget />
+  const urlParams = new URLSearchParams(window.location.search)
+  const isDevtools = urlParams.get('devtools') === 'true'
+
+  return isDevtools ? <CognitiveDevToolsConsole /> : <Widget />
 }

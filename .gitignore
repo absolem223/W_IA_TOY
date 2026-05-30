@@ -1,5 +1,7 @@
 node_modules/
 out/
+out-cognitive/
+out-cognitive-devtools/
 dist/
 .env
 .env.local
@@ -16,9 +18,18 @@ dist-electron/
 *.log
 npm-debug.log*
 
+# Local setup cache
+.tmp/
+
 # OS
 .DS_Store
 Thumbs.db
 
 # Editor
 .vscode/settings.json
+
+# Binarios y Modelos (Whisper)
+vendor/
+*.bin
+*.dll
+*.exe

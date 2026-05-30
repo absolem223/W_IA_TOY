@@ -2,7 +2,7 @@
 
 /*
  * =============================================================
- *  WIDGET IA — MOTION SYSTEM  (Living Stone × Quiet Precision)
+ *  ARGOS — MOTION SYSTEM  (Living Stone × Quiet Precision)
  * =============================================================
  *
  *  IDENTIDAD VISUAL
@@ -138,6 +138,26 @@
   --dur-blink:    600ms;   /* cursor de streaming — 500–700ms = ritmo natural */
   --dur-typing:  1000ms;   /* typing bounce — 1s = ritmo humano de mecanografeo */
 
+  /* ─── Z-Index Scale ──────────────────────────────────
+     Contrato de capas del widget. NUNCA usar literales.
+     Toda nueva capa debe registrarse aquí antes de usarla.
+
+     Jerarquía (stacking context: .widget isolation:isolate):
+       --z-noise    (0)  : noise texture — debajo de todo
+       --z-content  (1)  : contenido base del widget
+       --z-badge    (5)  : badges, topic indicator
+       --z-rim     (10)  : inner rim highlight (::after)
+       --z-overlay (15)  : debug overlay y floats internos
+       --z-popup   (20)  : voice settings, dropdowns
+       --z-modal   (50)  : confirmaciones futuras          */
+  --z-noise:    0;
+  --z-content:  1;
+  --z-badge:    5;
+  --z-rim:     10;
+  --z-overlay: 15;
+  --z-popup:   20;
+  --z-modal:   50;
+
   /* ─── Paleta — Dark Slate / Blue Undertones ──────────
      Sin indigo, sin lavanda. Un azul pizarra desaturado
      que recede en lugar de afirmarse.                    */
@@ -214,15 +234,67 @@
     0 10px  26px rgba(20, 30, 50, 0.28),
     0 24px  80px rgba(20, 30, 50, 0.19),
     0  6px  28px rgba(91, 141, 239, 0.08);
+
+  /* ─── Layer System — Material Depth ──────────────────────
+     Cada capa tiene firma de material única.
+     Nunca copiar bg/blur de otra capa sin ajustar opacidades.
+
+     Jerarquía de materialidad (más alto = más definido/opaco):
+       Base shell   : blur 28px, bg-widget 0.92
+       Header       : no blur, bg-header 0.97
+       Content      : no blur, bg-chat 0.95
+       --bg-panel   : no blur, para paneles full-view (memory)
+       --bg-layer-overlay: no blur, para overlays informativos (debug)
+       --bg-layer-popup   : blur 16px, para dropdowns interactivos   */
+  --bg-panel:          rgba(10, 12, 18, 0.96);   /* memory, future drawers */
+  --bg-layer-overlay:  rgba(11, 13, 19, 0.95);   /* debug panel — sin blur */
+  --bg-layer-popup:    rgba(12, 14, 22, 0.97);   /* voice settings — con blur */
+
+  /* Inner rim por capa — la capa superior tiene borde más definido.
+     Comunica profundidad sin color: 0.03 base → 0.06 overlay → 0.09 popup */
+  --rim-base:    rgba(255, 255, 255, 0.03);   /* shell — casi imperceptible */
+  --rim-overlay: rgba(255, 255, 255, 0.06);   /* overlay — perceptible en borde */
+  --rim-popup:   rgba(255, 255, 255, 0.09);   /* popup — claramente definido */
+
+  /* Spacing tokens — ritmo vertical consistente
+     Uso: spacing del sistema, nunca literales en componentes nuevos.
+     Los componentes existentes migran gradualmente (no big-bang).    */
+  --space-xs:  4px;
+  --space-sm:  8px;
+  --space-md: 12px;
+  --space-lg: 14px;
+  --space-xl: 20px;
 }
 
 /* ─── Root ───────────────────────────────────────────── */
-html, body, #root {
-  width: 100%; height: 100%;
+html, body {
+  width: 100vw;
+  height: 100vh;
   background: transparent;
   font-family: var(--font);
   -webkit-font-smoothing: antialiased;
   color: var(--text);
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+/* #root es el flex container del widget.
+   .widget usa flex:1 para llenarlo — evita height:100% que pega
+   el shadow/border-radius contra el borde bruto de la ventana Electron
+   y produce recorte visual (el bug de viewport/layout detectado en QA). */
+#root {
+  width: 100%; height: 100%;
+  background: transparent;
+  /* padding: 2px crea un margen seguro contra el borde crudo de la ventana.
+     El shadow y el border-radius del .widget quedan completamente dentro,
+     eliminando el clipping visual. box-sizing:border-box incluye el padding
+     en el 100% de dimensiones — sin scroll ni overflow. */
+  padding: 2px;
+  box-sizing: border-box;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ─── Widget Shell ───────────────────────────────────── */
@@ -231,7 +303,11 @@ html, body, #root {
   isolation: isolate;           /* stacking context independiente             */
   display: flex;
   flex-direction: column;
-  width: 360px;
+  width: 100%;
+  flex: 1;                      /* llena #root (flex col) sin height:100%    */
+  min-height: 0;                /* flex scroll contract hacia hijos           */
+  min-width: 320px;
+  max-width: 780px;
   border-radius: var(--radius-widget);
   background: var(--bg-widget);
   backdrop-filter: blur(28px) saturate(140%);
@@ -268,20 +344,21 @@ html, body, #root {
   background-size: 256px 256px;
   opacity: 0.028;
   pointer-events: none;
-  z-index: 0;
+  z-index: var(--z-noise);
 }
 
 /* Todo el contenido del widget por encima del noise */
 .widget > * {
   position: relative;
-  z-index: 1;
+  z-index: var(--z-content);
 }
 
 /* Inner rim diffusion — reduces hard-edge perception.
    0.5px inner highlight a 3% de blanco.
    Imperceptible sobre el contenido, efectivo solo en la
    frontera del material donde suaviza la transición borde→fondo.
-   z-index alto pero opacity 0.03 → visualmente nulo sobre contenido. */
+   --z-rim (10): por encima de todo el contenido pero opacity 0.03
+   lo hace visualmente nulo sobre el contenido. */
 .widget::after {
   content: '';
   position: absolute;
@@ -289,7 +366,7 @@ html, body, #root {
   border-radius: inherit;
   box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.03);
   pointer-events: none;
-  z-index: 10;
+  z-index: var(--z-rim);
 }
 
 /* Idle identity — el widget en reposo usa --shadow-idle.
@@ -337,11 +414,42 @@ html, body, #root {
   justify-content: space-between;
   padding: 0 14px;
   height: 52px;
+  min-height: 52px;             /* flex-shrink guard: header nunca se comprime */
   background: var(--bg-header);
   border-bottom: 1px solid var(--border);
   -webkit-app-region: drag;
   cursor: grab;
   flex-shrink: 0;
+  transition: 
+    background var(--dur-slow) var(--ease-out),
+    border-color var(--dur-slow) var(--ease-out),
+    box-shadow var(--dur-slow) var(--ease-out),
+    opacity var(--dur-slow) var(--ease-out);
+}
+
+/* Estado Idle (Cerrado) — Quiet Precision */
+.widget-header--idle {
+  /* Preparamos el terreno para la iluminación inferior */
+  background: var(--bg-header);
+}
+
+.widget-header--pulse-a { animation: headerBreathA var(--dur-idle) var(--ease-in-out) 2; }
+.widget-header--pulse-b { animation: headerBreathB var(--dur-idle) var(--ease-in-out) 2; }
+
+/* Hover feedback cuando está cerrado: 
+   Evitamos background, usamos iluminación inferior para insinuar materialidad */
+.widget-header--idle:hover {
+  animation: none;
+  opacity: 1;
+  background: var(--bg-header);
+  border-bottom-color: rgba(var(--accent-rgb), 0.35);
+  box-shadow: 0 1px 8px rgba(var(--accent-rgb), 0.08);
+}
+
+/* Light mode coherency para el hover */
+.widget[data-bg="light"] .widget-header--idle:hover {
+  border-bottom-color: rgba(var(--accent-rgb), 0.45);
+  box-shadow: 0 1px 8px rgba(var(--accent-rgb), 0.12);
 }
 .widget-header__brand {
   display: flex;
@@ -350,13 +458,55 @@ html, body, #root {
   user-select: none;
 }
 
-/* Dot — pulso de opacidad, sin rebote. Sincronizado con idlePulse. */
+/* Grupo de botones del header — gap sale del JSX al CSS.
+   --space-sm (8px) es el ritmo base entre controles relacionados. */
+.widget-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+/* ─── Dot Semantics ────────────────────────────────────── */
+/* Base class properties */
 .widget-header__dot {
   width: 7px; height: 7px;
   border-radius: 50%;
+  /* opacity en la transición evita el jump brusco entre estados.
+     El estado nuevo hace fade-in mientras el anterior sale.
+     --dur-base (240ms) > --dur-fast (160ms): llega después del color,
+     creando una secuencia color-primero → opacidad-completa. */
+  transition:
+    background  var(--dur-fast) var(--ease-out),
+    box-shadow  var(--dur-fast) var(--ease-out),
+    opacity     var(--dur-base) var(--ease-in-out);
+}
+
+/* IDLE: color accent por defecto, con el pulso lento ambiental */
+.widget-header__dot--idle {
   background: var(--accent);
   box-shadow: 0 0 6px rgba(var(--accent-rgb), 0.5);
   animation: dotPulse var(--dur-idle) var(--ease-in-out) infinite;
+}
+
+/* THINKING: ámbar/amarillo desaturado, pulso acelerado y contracción sutil */
+.widget-header__dot--thinking {
+  background: #E8B971;
+  box-shadow: 0 0 8px rgba(232, 185, 113, 0.6);
+  animation: dotThinking 1.2s var(--ease-in-out) infinite;
+}
+
+/* STREAMING: azul cielo/cian muted, sin pulso, sólido */
+.widget-header__dot--streaming {
+  background: #71BEE8;
+  box-shadow: 0 0 10px rgba(113, 190, 232, 0.8);
+  animation: none;
+}
+
+/* ERROR: rojo mate suave */
+.widget-header__dot--error {
+  background: #E87171;
+  box-shadow: 0 0 8px rgba(232, 113, 113, 0.6);
+  animation: none;
 }
 
 .widget-header__title {
@@ -391,6 +541,25 @@ html, body, #root {
   color: var(--accent);
   transform: scale(1.08);
 }
+.widget-header__devtools-btn {
+  -webkit-app-region: no-drag;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: rgba(var(--accent-rgb), 0.08);
+  border: 1px solid var(--border);
+  color: rgba(var(--accent-rgb), 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-micro), border-color var(--dur-fast) var(--ease-micro), color var(--dur-fast) var(--ease-micro), transform var(--dur-fast) var(--ease-micro);
+}
+.widget-header__devtools-btn:hover {
+  background: rgba(var(--accent-rgb), 0.18);
+  border-color: rgba(var(--accent-rgb), 0.25);
+  transform: scale(1.06);
+}
 .widget-toggle:active {
   transform: scale(0.94);
   transition-duration: var(--dur-micro);
@@ -400,31 +569,145 @@ html, body, #root {
 .chat-panel {
   display: flex;
   flex-direction: column;
-  height: 480px;
+  flex: 1;
+  min-height: 0;                /* crucial: permite que flex-children hagan scroll */
+  overflow: hidden;             /* contiene el scroll dentro del panel */
   animation: panelReveal var(--dur-slow) var(--ease-out) both;
 }
 .chat-panel--closing {
   animation: panelCollapse var(--dur-slow) var(--ease-in-out) both;
   pointer-events: none;
+  /* transform-origin: top — el scaleY del collapse nace desde el header,
+     la sensación es que el panel se retrae hacia arriba, no que se encoge
+     desde su centro. Coherente con la dirección de panelReveal. */
+  transform-origin: top;
+}
+.chat-panel__footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--bg-header);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.debug-overlay {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: var(--z-overlay);    /* --z-overlay (15): sobre contenido, bajo --z-rim */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  pointer-events: none;         /* el contenedor no bloquea clicks; solo los hijos interactivos los reciben */
+}
+.debug-overlay__toggle,
+.debug-overlay__panel {
+  pointer-events: auto;         /* los hijos sí reciben clicks */
+}
+.debug-overlay__toggle {
+  -webkit-app-region: no-drag;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(10, 10, 12, 0.7);
+  color: #f8fafc;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform var(--dur-fast) var(--ease-micro), background var(--dur-fast) var(--ease-micro);
+}
+.debug-overlay__toggle:hover {
+  transform: scale(1.07);
+  background: rgba(10, 10, 12, 0.88);
+}
+.debug-overlay__panel {
+  margin-top: 10px;
+  width: min(320px, 90vw);
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  /* --bg-layer-overlay: sin blur (sobre widget ya blureado) — performance safe */
+  background: var(--bg-layer-overlay);
+  color: #e2e8f0;
+  /* border + inner rim: overlay tiene definición media (entre base y popup) */
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.32),
+    inset 0 0 0 0.5px var(--rim-overlay);
+  max-height: 420px;
+  overflow: auto;
+  font-size: 12px;
+  animation: panelReveal var(--dur-base) var(--ease-out) both;
+}
+.debug-overlay__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.debug-overlay__row--small {
+  font-size: 11px;
+}
+.debug-overlay__note {
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #cbd5e1;
+}
+.debug-overlay__preview {
+  margin-top: 10px;
+}
+.debug-overlay__preview pre {
+  max-height: 130px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 8px;
+  border-radius: 10px;
+}
+.debug-overlay__footer {
+  margin-top: 10px;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.active-topic-indicator {
+  position: absolute;
+  bottom: 60px;
+  right: 12px;
+  font-size: 10px;
+  color: var(--muted);
+  background: rgba(var(--bg-rgb), 0.6);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+  z-index: var(--z-badge);      /* --z-badge (5): badge flotante, bajo rim y overlay */
+  animation: fadeIn var(--dur-fast) ease-out;
+  border: 1px solid var(--border);
 }
 
 /* ─── Message List ───────────────────────────────────── */
 .message-list {
   flex: 1;
+  min-height: 0;        /* flex scroll contract: sin esto overflow-y:auto no se activa */
   overflow-y: auto;
+  overflow-x: hidden;
+  overflow-anchor: auto;
+  scroll-behavior: smooth;
   padding: 14px 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
   background: var(--bg-chat);
-  scrollbar-width: thin;
-  scrollbar-color: rgba(var(--accent-rgb), 0.15) transparent;
+  scrollbar-width: none; /* Firefox */
 }
-.message-list::-webkit-scrollbar       { width: 3px; }
-.message-list::-webkit-scrollbar-thumb {
-  background: rgba(var(--accent-rgb), 0.15);
-  border-radius: 3px;
-}
+.message-list::-webkit-scrollbar       { display: none; /* Chrome, Safari, Electron */ }
 
 .message-list__empty {
   font-size: 12px;
@@ -436,7 +719,9 @@ html, body, #root {
 
 /* ─── Message Bubbles ────────────────────────────────── */
 .message {
-  max-width: 84%;
+  max-width: 100%;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
   contain: layout style;
   /* spring easing + 60ms delay — el mensaje "llega", no aparece.
      El delay crea percepción de intención sin latencia real.     */
@@ -481,21 +766,21 @@ html, body, #root {
 .message--assistant.delay-v2    { animation-delay: 140ms, 140ms; }
 
 .message__content {
-  font-size: 13px;
-  line-height: 1.65;
-  padding: 9px 13px;
-  border-radius: var(--radius-md);
+  font-size: 13.5px;
+  line-height: 1.5;
+  padding: 12px 16px;
+  border-radius: 14px;
   white-space: pre-wrap;
   word-break: break-word;
 }
 .message--user .message__content {
   background: var(--bg-user);
-  border-bottom-right-radius: 3px;
+  border-bottom-right-radius: 4px;
 }
 .message--assistant .message__content {
   background: var(--bg-ai);
   border: 1px solid var(--border);
-  border-bottom-left-radius: 3px;
+  border-bottom-left-radius: 4px;
 }
 
 /* Streaming cursor */
@@ -507,6 +792,55 @@ html, body, #root {
   margin-left: 2px;
   vertical-align: baseline;
   opacity: 0.8;
+}
+
+/* ─── Message Actions ────────────────────────────────── */
+.message__bubble-wrapper {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.message__actions {
+  position: absolute;
+  bottom: -14px;
+  right: 12px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: all 0.2s ease;
+  background: var(--bg-header);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 10;
+}
+
+.message__bubble-wrapper:hover .message__actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.message__action-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.message__action-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
 }
 
 /* ─── Typing Indicator ───────────────────────────────── */
@@ -529,44 +863,134 @@ html, body, #root {
 
 /* ─── Chat Input ─────────────────────────────────────── */
 .chat-input {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
-  background: var(--bg-header);
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
+  flex: 1;
+  min-width: 0;
+  background: transparent;
 }
 .chat-input__field {
   flex: 1;
+  min-width: 0;
+  width: 100%;
+  height: 38px;
+  min-height: 38px;
+  max-height: 150px;
+  box-sizing: border-box;
   background: var(--bg-input);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: 19px; /* Sleek pill */
   color: var(--text);
   font-family: var(--font);
-  font-size: 13px;
-  padding: 8px 12px;
+  font-size: 13.5px;
+  padding: 9px 16px;
   outline: none;
+  resize: none;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
   transition:
     border-color  var(--dur-fast) var(--ease-micro) 40ms,
     box-shadow    var(--dur-fast) var(--ease-out)   40ms,
-    opacity       var(--dur-base) var(--ease-micro);  /* sin delay — streaming start es un estado intencional */
+    opacity       var(--dur-base) var(--ease-micro);
 }
 .chat-input__field::placeholder { color: var(--muted); }
 .chat-input__field:focus {
   border-color: rgba(var(--accent-rgb), 0.45);
-  /* Ring reforzado: 0.35 (vs 0.12 anterior) — intención clara sin glow */
-  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.35);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.02), 0 0 0 2px rgba(var(--accent-rgb), 0.35);
 }
 .chat-input__field:disabled { opacity: 0.4; }
 
-.chat-input__send {
-  width: 30px; height: 30px;
+.proxy-badge {
+  position: absolute;
+  top: -24px;
+  right: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  background: var(--bg-input);
+  padding: 3px 8px;
   border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  pointer-events: none;
+  z-index: var(--z-badge);      /* --z-badge (5): mismo nivel que topic indicator */
+  animation: badgeIn var(--dur-fast) var(--ease-out);
+}
+
+.proxy-badge--error {
+  color: #E87171;
+  border-color: rgba(232, 113, 113, 0.3);
+  background: rgba(20, 10, 10, 0.6);
+  backdrop-filter: blur(8px);
+}
+
+.proxy-badge--memory {
+  color: rgba(160, 200, 255, 0.85);
+  border-color: rgba(120, 160, 255, 0.25);
+  background: rgba(10, 15, 30, 0.7);
+  backdrop-filter: blur(8px);
+}
+
+.proxy-badge--transcribing {
+  color: #E8B971;
+  border-color: rgba(232, 185, 113, 0.3);
+  background: rgba(30, 25, 10, 0.7);
+  backdrop-filter: blur(8px);
+  animation: badgeIn var(--dur-fast) var(--ease-out), badgePulse 1.5s infinite alternate;
+}
+
+@keyframes badgePulse {
+  0% { opacity: 0.6; box-shadow: 0 0 4px rgba(232, 185, 113, 0.2); }
+  100% { opacity: 1; box-shadow: 0 0 12px rgba(232, 185, 113, 0.5); }
+}
+
+@keyframes badgeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.chat-input__mic {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition:
+    background var(--dur-fast) var(--ease-micro),
+    color var(--dur-fast) var(--ease-micro),
+    transform var(--dur-fast) var(--ease-micro);
+}
+.chat-input__mic:hover:not(:disabled) {
+  background: rgba(var(--accent-rgb), 0.1);
+  color: var(--text);
+}
+.chat-input__mic--active {
+  color: #ff4a4a !important;
+  animation: micPulse 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  background: rgba(255, 74, 74, 0.1);
+}
+
+@keyframes micPulse {
+  0% { box-shadow: 0 0 0 0 rgba(255, 74, 74, 0.4); transform: scale(0.95); }
+  70% { box-shadow: 0 0 0 10px rgba(255, 74, 74, 0); transform: scale(1.05); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 74, 74, 0); transform: scale(0.95); }
+}
+
+.chat-input__send {
+  width: 38px; height: 38px;
+  border-radius: 50%;
   background: var(--accent-dark);
   border: none;
   color: rgba(255,255,255,0.9);
-  font-size: 14px;
+  font-size: 16px;
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
@@ -584,6 +1008,38 @@ html, body, #root {
   transition-duration: var(--dur-micro);
 }
 .chat-input__send:disabled { opacity: 0.28; cursor: not-allowed; }
+
+/* Cancel button — aparece solo durante streaming */
+.chat-input__cancel {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: rgba(232, 113, 113, 0.12);
+  border: 1px solid rgba(232, 113, 113, 0.25);
+  color: #E87171;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition:
+    background var(--dur-fast) var(--ease-micro),
+    transform  var(--dur-fast) var(--ease-micro);
+}
+.chat-input__cancel:hover {
+  background: rgba(232, 113, 113, 0.22);
+  transform: scale(1.06);
+}
+.chat-input__cancel:active {
+  transform: scale(0.94);
+  transition-duration: var(--dur-micro);
+}
+
+/* Hint visual de error en el borde inferior del form */
+.chat-input--error .chat-input__field {
+  border-color: rgba(232, 113, 113, 0.35);
+}
+.chat-input--error .chat-input__field::placeholder {
+  color: rgba(232, 113, 113, 0.6);
+}
 
 /* ─── Utility ────────────────────────────────────────── */
 .no-drag { -webkit-app-region: no-drag; }
@@ -622,16 +1078,34 @@ html, body, #root {
   50%       { opacity: 1.00; box-shadow: 0 0 10px rgba(var(--accent-rgb), 0.7); }
 }
 
+/* Dot thinking — pulso ágil para indicar procesamiento */
+@keyframes dotThinking {
+  0%, 100% { opacity: 0.6; transform: scale(0.95); }
+  50%      { opacity: 1.0; transform: scale(1.05); }
+}
+
+/* Header Breath — animación acotada (se reinicia vía React) */
+@keyframes headerBreathA {
+  0%, 100% { opacity: 0.85; }
+  50%      { opacity: 1.00; }
+}
+@keyframes headerBreathB {
+  0%, 100% { opacity: 0.85; }
+  50%      { opacity: 1.00; }
+}
+
 /* Panel reveal */
 @keyframes panelReveal {
   from { opacity: 0; transform: translateY(-8px); }
   to   { opacity: 1; transform: translateY(0);    }
 }
 
-/* Panel collapse */
+/* Panel collapse — retrae hacia el header (transform-origin:top en .chat-panel--closing).
+   scaleY(0.97) simula que el panel se encoge hacia arriba antes de desaparecer.
+   translateY(-4px) — reducido de -6px: el movimiento es de retracción, no de huida. */
 @keyframes panelCollapse {
-  from { opacity: 1; transform: translateY(0);    }
-  to   { opacity: 0; transform: translateY(-6px); }
+  from { opacity: 1; transform: translateY(0)    scaleY(1);    }
+  to   { opacity: 0; transform: translateY(-4px) scaleY(0.97); }
 }
 
 /* Message in — split en transform + opacity para timing independiente.
@@ -676,4 +1150,419 @@ html, body, #root {
 @keyframes cursorBlink {
   0%, 100% { opacity: 0.8; }
   50%       { opacity: 0;   }
+}
+
+/* ── Voice Controls ─────────────────────────────────────── */
+.voice-controls-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.voice-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Indicator container — fades in/out to avoid flashes */
+.voice-controls__indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.voice-controls__indicator--speaking,
+.voice-controls__indicator--generating,
+.voice-controls__indicator--listening,
+.voice-controls__indicator--transcribing,
+.voice-controls__indicator--interrupted,
+.voice-controls__indicator--error {
+  opacity: 1;
+}
+
+.voice-controls__indicator--idle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Speaking bars — 3 animated bars */
+.voice-controls__bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5px;
+  height: 12px;
+}
+
+.voice-controls__bar {
+  display: block;
+  width: 2px;
+  background: var(--c-accent, #7dd3fc);
+  border-radius: 1px;
+  animation: voiceBar 0.9s ease-in-out infinite;
+}
+
+.voice-controls__bar:nth-child(1) {
+  animation-delay: 0s;
+  height: 4px;
+}
+
+.voice-controls__bar:nth-child(2) {
+  animation-delay: 0.15s;
+  height: 8px;
+}
+
+.voice-controls__bar:nth-child(3) {
+  animation-delay: 0.3s;
+  height: 5px;
+}
+
+@keyframes voiceBar {
+  0%, 100% { transform: scaleY(0.4); }
+  50%      { transform: scaleY(1.0); }
+}
+
+/* Generating spinner */
+.voice-controls__spinner {
+  font-size: 7px;
+  color: var(--c-text-secondary, rgba(255, 255, 255, 0.4));
+  animation: voiceSpin 1.2s linear infinite;
+}
+
+@keyframes voiceSpin {
+  0%   { opacity: 0.3; }
+  50%  { opacity: 0.8; }
+  100% { opacity: 0.3; }
+}
+
+/* Buttons */
+.voice-controls__stop,
+.voice-controls__mute,
+.voice-controls__toggle,
+.voice-controls__test-btn,
+.voice-controls__settings-btn {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: var(--c-text-secondary, rgba(255, 255, 255, 0.5));
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 5px;
+  line-height: 1;
+  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease, color 0.15s ease;
+}
+
+.voice-controls__stop:hover,
+.voice-controls__mute:hover,
+.voice-controls__toggle:hover,
+.voice-controls__test-btn:hover,
+.voice-controls__settings-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.voice-controls__toggle.active {
+  color: var(--c-accent, #7dd3fc);
+  border-color: var(--c-accent, #7dd3fc);
+}
+.voice-controls__toggle.inactive {
+  opacity: 0.5;
+}
+
+.voice-controls__stop:active,
+.voice-controls__mute:active,
+.voice-controls__toggle:active,
+.voice-controls__test-btn:active,
+.voice-controls__settings-btn:active {
+  transform: scale(0.95);
+}
+
+.voice-controls__mute--active {
+  opacity: 0.35;
+}
+
+.voice-controls__settings-btn {
+  background: none;
+  border: none;
+  color: var(--c-text-secondary, rgba(255, 255, 255, 0.5));
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px;
+  transition: opacity 0.15s;
+  opacity: 0.6;
+}
+.voice-controls__settings-btn:hover {
+  opacity: 1;
+}
+
+.voice-settings-panel {
+  position: absolute;
+  bottom: calc(100% + 14px);
+  right: 0;
+  width: 220px;
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transition: max-height var(--dur-slow) var(--ease-in-out),
+              opacity var(--dur-base) var(--ease-out),
+              bottom var(--dur-slow) var(--ease-in-out);
+  background: var(--bg-layer-popup);
+  border-radius: var(--radius-md);
+  z-index: 10;
+}
+.voice-settings-panel--open {
+  max-height: 200px; /* will be overridden later to 420px */
+  opacity: 1;
+  bottom: calc(100% + 10px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.voice-settings-panel__inner {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.vsp-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.vsp-label {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.vsp-toggle, .vsp-action {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--muted);
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all var(--dur-fast) ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.vsp-toggle:hover, .vsp-action:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--text);
+}
+.vsp-toggle--on {
+  color: var(--accent);
+  border-color: rgba(var(--accent-rgb), 0.3);
+  background: rgba(var(--accent-rgb), 0.1);
+}
+.vsp-toggle--on:hover {
+  background: rgba(var(--accent-rgb), 0.15);
+}
+.vsp-toggle--muted {
+  color: #E87171;
+  border-color: rgba(232, 113, 113, 0.3);
+  background: rgba(232, 113, 113, 0.1);
+}
+.vsp-toggle--muted:hover {
+  background: rgba(232, 113, 113, 0.15);
+}
+
+.voice-controls__gear {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  transition: color var(--dur-fast), background var(--dur-fast), transform var(--dur-fast);
+}
+.voice-controls__gear:hover {
+  color: var(--text);
+  background: rgba(255,255,255,0.05);
+}
+.voice-controls__gear--active {
+  color: var(--accent);
+  transform: rotate(45deg);
+}
+
+.voice-controls__listening, .voice-controls__transcribing {
+  font-size: 10px;
+  animation: pulseOpacity 1.5s infinite;
+}
+
+@keyframes pulseOpacity {
+  0% { opacity: 0.5; }
+  50% { opacity: 1; }
+  100% { opacity: 0.5; }
+}
+
+/* ─── COGNITIVE UX ELEMENTS ───────────────────────────── */
+.cognitive-status-text {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  animation: pulseOpacity 2s infinite ease-in-out;
+}
+
+.context-card {
+  margin-top: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle, rgba(255,255,255,0.1));
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+.context-card:hover {
+  background: var(--bg-surface-hover, rgba(255,255,255,0.05));
+  border-color: var(--accent);
+}
+.context-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 500;
+  color: var(--text);
+}
+.context-card-badge {
+  background: rgba(97, 218, 251, 0.1);
+  color: #61dafb;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.context-card-content {
+  color: var(--text-muted);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+.context-card-footer {
+  display: flex;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.context-card-link {
+  color: var(--accent);
+  text-decoration: none;
+}
+.context-card-link:hover {
+  text-decoration: underline;
+}
+
+/* ─── Voice Settings Panel — Extended Controls ───────────────
+   Provider selector, voice dropdown, speed/pitch/volume sliders.
+   Uses existing --bg-layer-popup and system token vocabulary.
+   ─────────────────────────────────────────────────────────── */
+
+/* Increase max-height to accommodate extra controls */
+.voice-settings-panel--open {
+  max-height: 420px;
+}
+
+/* Select dropdown */
+.vsp-select {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 3px 6px;
+  cursor: pointer;
+  max-width: 140px;
+  transition: border-color var(--dur-fast) var(--ease-micro),
+              background   var(--dur-fast) var(--ease-micro);
+  outline: none;
+}
+.vsp-select:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+}
+.vsp-select:focus {
+  border-color: rgba(var(--accent-rgb), 0.45);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.15);
+}
+/* Style select option for dark background */
+.vsp-select option {
+  background: #0d1018;
+  color: var(--text);
+}
+
+/* Slider row: label + value on one line, range on next */
+.vsp-slider-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vsp-slider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.vsp-value {
+  font-size: 10px;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  min-width: 32px;
+  text-align: right;
+}
+
+/* Range slider — minimal, system-coherent */
+.vsp-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  outline: none;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-micro);
+}
+.vsp-slider:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+.vsp-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.25);
+  transition: box-shadow var(--dur-fast) var(--ease-micro),
+              transform  var(--dur-fast) var(--ease-micro);
+}
+.vsp-slider::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.3);
+  transform: scale(1.1);
+}
+.vsp-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
 }

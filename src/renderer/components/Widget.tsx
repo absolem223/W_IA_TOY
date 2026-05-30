@@ -1,6 +1,9 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { WidgetHeader } from './WidgetHeader'
 import { ChatPanel } from './ChatPanel'
+import { MemoryPanel } from './MemoryPanel'
+import { ApprovalOverlay } from './ApprovalOverlay'
+import { useWidgetLayers } from '../hooks/useWidgetLayers'
 
 const HEIGHT_CLOSED = 60
 const HEIGHT_OPEN   = 540
@@ -24,9 +27,11 @@ function useBgContext(): 'dark' | 'light' {
 
 export function Widget(): React.ReactElement {
   const [isOpen, setIsOpen]       = useState(false)
-  const [isClosing, setIsClosing] = useState(false)
+  const [view, setView]           = useState<'chat' | 'memory'>('chat')
   const closingTimer              = useRef<ReturnType<typeof setTimeout> | null>(null)
   const bgContext                 = useBgContext()
+  const layers                    = useWidgetLayers()
+  const { isClosing, setIsClosing } = layers
 
   const toggle = useCallback(() => {
     if (isOpen) {
@@ -35,6 +40,7 @@ export function Widget(): React.ReactElement {
       closingTimer.current = setTimeout(() => {
         setIsClosing(false)
         setIsOpen(false)
+        setView('chat') // reset to chat on close
         window.electronAPI.resizeWindow(HEIGHT_CLOSED)
         window.electronAPI.setPanelState(false)
       }, CLOSE_ANIM_MS)
@@ -46,6 +52,10 @@ export function Widget(): React.ReactElement {
     }
   }, [isOpen])
 
+  const toggleMemory = useCallback(() => {
+    setView(v => v === 'memory' ? 'chat' : 'memory')
+  }, [])
+
   return (
     <div
       className="widget"
@@ -53,8 +63,24 @@ export function Widget(): React.ReactElement {
       data-bg={bgContext}
       data-event="idle-pulse"
     >
-      <WidgetHeader isOpen={isOpen} onToggle={toggle} />
-      {isOpen && <ChatPanel isClosing={isClosing} />}
+      {/* El header siempre visible y siempre clickeable.
+          Electron maneja el resize de ventana — no necesitamos
+          bloquear pointer-events en CSS para "ocultar" el área. */}
+      <WidgetHeader isOpen={isOpen} onToggle={toggle} onMemoryToggle={toggleMemory} memoryActive={view === 'memory'} />
+
+      {/* Panel de contenido: solo se monta cuando el widget está abierto.
+          pointer-events:none durante la animación de cierre para evitar
+          inputs accidentales mientras colapsa. */}
+      {isOpen && (
+        <div style={{ pointerEvents: layers.getPointerEvents('base'), minHeight: 0, flex: 1, display: 'flex', flexDirection: 'column' }}>
+          {view === 'chat'
+            ? <ChatPanel isClosing={isClosing} />
+            : <MemoryPanel isClosing={isClosing} />
+          }
+        </div>
+      )}
+      <ApprovalOverlay />
     </div>
   )
 }
+

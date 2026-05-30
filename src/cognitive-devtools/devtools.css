@@ -1,0 +1,150 @@
+.cdt-root {
+  min-height: 100vh;
+  background: #f7f7f8;
+  color: #16181d;
+  font: 13px/1.4 system-ui, sans-serif;
+}
+
+.cdt-topbar,
+.cdt-panel__header,
+.cdt-filter-row,
+.cdt-controls,
+.cdt-metric-grid {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.cdt-topbar {
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid #d8dce3;
+  background: #fff;
+}
+
+.cdt-topbar h1,
+.cdt-panel h2,
+.cdt-panel h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.cdt-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.85fr) minmax(520px, 1.7fr) minmax(280px, 1fr);
+  gap: 10px;
+  padding: 10px;
+}
+
+.cdt-column {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cdt-panel {
+  min-width: 0;
+  border: 1px solid #d8dce3;
+  border-radius: 6px;
+  background: #fff;
+  padding: 10px;
+}
+
+.cdt-panel__header {
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.cdt-panel input {
+  min-width: 0;
+}
+
+.cdt-filter-row {
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.cdt-filter-row button,
+.cdt-controls button,
+.cdt-panel button {
+  border: 1px solid #cbd1dc;
+  border-radius: 5px;
+  background: #fff;
+  padding: 4px 7px;
+}
+
+.cdt-filter-row button.is-active {
+  background: #1f2937;
+  color: #fff;
+}
+
+.cdt-event-list,
+.cdt-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cdt-event {
+  border-top: 1px solid #edf0f4;
+  padding-top: 8px;
+}
+
+.cdt-event div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cdt-table-wrap {
+  overflow: auto;
+}
+
+.cdt-table {
+  width: 100%;
+  border-collapse: collapse;
+  white-space: nowrap;
+}
+
+.cdt-table th,
+.cdt-table td {
+  border-bottom: 1px solid #edf0f4;
+  padding: 5px 6px;
+  text-align: left;
+}
+
+.cdt-graph {
+  height: 420px;
+  border: 1px solid #edf0f4;
+}
+
+.cdt-chart {
+  height: 180px;
+  margin-top: 10px;
+}
+
+.cdt-metric-grid {
+  flex-wrap: wrap;
+}
+
+.cdt-metric {
+  min-width: 120px;
+  border: 1px solid #edf0f4;
+  border-radius: 5px;
+  padding: 6px;
+}
+
+.cdt-metric span,
+.cdt-metric strong {
+  display: block;
+}
+
+pre {
+  overflow: auto;
+  max-height: 260px;
+  margin: 0;
+  border-radius: 5px;
+  background: #f4f6f8;
+  padding: 8px;
+}
