@@ -19,6 +19,8 @@ import { parseCommand, dispatchAction } from './actions/registry'
 import type { ActionContext } from './actions/registry'
 import './actions/commands' // Side-effect: registers all built-in commands
 import { showBootBanner } from './bootBanner'
+import { StorageService } from './services/StorageService'
+import { DataMigrator } from './services/DataMigrator'
 
 import { createToolRegistry } from './tools/ToolRegistry'
 import { registerMemoryTools } from './tools/memoryTools'
@@ -34,8 +36,9 @@ import { LocalFallbackProvider } from './services/llm/providers/LocalFallbackPro
 import { AgentEventStore } from './agent/AgentEventStore'
 import { AgentExecutor } from './agent/AgentExecutor'
 
-// ─── LOGGER INITIALIZATION ───────────────────────────────────
-const userDataPath = app.getPath('userData')
+// ─── USER DATA REDIRECTION (Fase 1 — Persistent User Data) ───
+StorageService.initialize()
+const userDataPath = StorageService.getUserDataPath()
 
 // ── Boot Banner ── shown immediately at process start, before any subsystem
 showBootBanner(userDataPath)
@@ -86,6 +89,27 @@ let isShuttingDown = false
 
 app.whenReady().then(async () => {
   appLog.info('app.whenReady() triggered.')
+  
+  // ─── DATA MIGRATION (Fase 1 — Persistent User Data) ───
+  try {
+    const oldUserDataPath = join(app.getPath('appData'), 'widget-ia-toy')
+    const newUserDataPath = StorageService.getUserDataPath()
+    appLog.info(`[BOOT_MIGRATION] Checking for data migration from ${oldUserDataPath} to ${newUserDataPath}...`)
+    const migrationResult = await DataMigrator.migrate(
+      oldUserDataPath,
+      newUserDataPath,
+      (msg) => appLog.info(msg),
+      (msg, err) => appLog.error(msg, err)
+    )
+    if (migrationResult.migrated) {
+      appLog.info(`[BOOT_MIGRATION] Data migration completed with status: ${migrationResult.state?.status.toUpperCase()}`)
+    } else {
+      appLog.info('[BOOT_MIGRATION] Data migration skipped (already completed).')
+    }
+  } catch (migErr) {
+    appLog.error('[BOOT_MIGRATION] Critical failure during migration process:', migErr)
+  }
+
   if (process.platform === 'win32') {
     app.setAppUserModelId('com.argos.widget')
   }
