@@ -1,22 +1,29 @@
 {
   "name": "widget-ia-toy",
-  "version": "0.1.0",
+  "version": "3.2.0",
   "private": true,
   "main": "out/main/index.js",
   "scripts": {
+    "predev": "node scripts/generate-version.js",
     "dev": "electron-vite dev",
     "dev:app": "electron-vite dev",
     "proxy": "node proxy/index.js",
     "setup:whisper": "powershell -ExecutionPolicy Bypass -File scripts/setup-whisper.ps1",
+    "prebuild": "node scripts/generate-version.js",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit",
     "test:cognitive": "tsc -p tsconfig.cognitive.json && node out-cognitive/tests/cognitive/core.test.js && node out-cognitive/tests/cognitive/observability.test.js && node out-cognitive/tests/cognitive/metacognition.test.js && node out-cognitive/tests/cognitive/stability.test.js && node out-cognitive/tests/cognitive/selfknowledge.test.js && node out-cognitive/tests/cognitive/recovery.test.js && node out-cognitive/tests/cognitive/hardening.test.js",
     "test:cognitive-devtools": "tsc -p tsconfig.cognitive-devtools.json && node out-cognitive-devtools/tests/cognitive-devtools/transport.test.js",
+    "prebuild:local": "node scripts/generate-version.js",
     "build:local": "electron-vite build && electron-builder --dir",
+    "prebuild:preview": "node scripts/generate-version.js",
     "build:preview": "electron-vite build && electron-builder --dir && start \"\" \"dist\\win-unpacked\\Argos.exe\"",
     "rebuild": "electron-builder install-app-deps",
-    "clean-install": "rimraf node_modules package-lock.json && npm install && npm run rebuild",
-    "doctor": "node scripts/doctor.js"
+    "clean-install": "rimraf node_modules pnpm-lock.yaml && pnpm install && pnpm run rebuild",
+    "doctor": "node scripts/doctor.js",
+    "version:patch": "pnpm version patch --no-git-tag-version",
+    "version:minor": "pnpm version minor --no-git-tag-version",
+    "version:major": "pnpm version major --no-git-tag-version"
   },
   "dependencies": {
     "@xyflow/react": "^12.10.2",
@@ -51,6 +58,13 @@
       {
         "from": "vendor/whisper",
         "to": "whisper",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": ".env",
+        "to": ".env",
         "filter": [
           "**/*"
         ]
