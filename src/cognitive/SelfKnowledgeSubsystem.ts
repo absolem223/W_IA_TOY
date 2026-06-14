@@ -1,4 +1,15 @@
 import { CapabilityGraph, type CapabilityGraphSnapshot, type CapabilityNode } from './CapabilityGraph'
+import { ARGOS_FOUNDATIONAL_STATEMENT, ARGOS_SELF_MODEL, SelfAwarenessLayer } from '../shared/selfAwareness'
+
+function getPackageVersion(): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const pkg = require('../../package.json') as { version?: string }
+    return pkg.version ?? '3.2.0'
+  } catch {
+    return '3.2.0'
+  }
+}
 
 export interface RuntimeAwareness {
   systemName: string
@@ -23,6 +34,8 @@ export interface DependencyAwareness {
 
 export interface SelfKnowledgeReport {
   runtime: RuntimeAwareness
+  foundationalStatement: string
+  selfAwareness: Record<SelfAwarenessLayer, string>
   capabilityGraph: CapabilityGraphSnapshot
   activeModules: CapabilityNode[]
   providers: CapabilityNode[]
@@ -35,7 +48,7 @@ export class SelfKnowledgeSubsystem {
     private runtime: RuntimeAwareness = {
       systemName: 'Argos Cognitive Core',
       mode: 'experimental-isolated',
-      version: '0.1.0',
+      version: getPackageVersion(),
       deterministic: true,
       runtimeIntegration: 'none',
     },
@@ -48,6 +61,8 @@ export class SelfKnowledgeSubsystem {
     const snapshot = this.graph.snapshot(now)
     return {
       runtime: { ...this.runtime },
+      foundationalStatement: ARGOS_FOUNDATIONAL_STATEMENT,
+      selfAwareness: { ...ARGOS_SELF_MODEL },
       capabilityGraph: snapshot,
       activeModules: snapshot.nodes.filter(node => node.kind === 'module' && node.state === 'enabled'),
       providers: snapshot.nodes.filter(node => node.kind === 'provider'),

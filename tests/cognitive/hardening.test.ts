@@ -22,6 +22,7 @@ const mockWindow = {
 const mockElectron = {
   app: {
     getPath: () => './temp-user-data-hardening-test',
+    getVersion: () => '1.0.0',
   },
   BrowserWindow: {
     getAllWindows: () => [mockWindow],

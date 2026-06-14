@@ -9,10 +9,12 @@ import { MemoryPrioritizer, type MemoryItem, type MemoryScoreBreakdown } from '.
 import { ConversationalFocusWindow, type FocusWindowState } from './conversationalFocusWindow'
 import type { ChatMessage } from '../shared/types'
 import type { ProviderCapabilities } from './services/llm/types'
+import { buildSelfAwarenessPrompt } from '../shared/selfAwareness'
 
 export interface PromptLayersInput {
   systemIdentity: string
-  runtimeIntrospection: Record<string, unknown>
+  runtimeIntrospection: Record<string, unknown> | string
+  memoryPreamble?: string
   assistantIdentity: string
   memories: MemoryItem[]
   messageHistory: ChatMessage[]
@@ -68,12 +70,26 @@ export class PromptLayerOrchestrator {
     })
     this.orchestrator.updateLayerUsage('system-identity', systemIdentity.length)
 
+    // Optional: Memory preamble (explicit short summary injected by MemoryManager)
+    if (input.memoryPreamble && input.memoryPreamble.length > 0) {
+      const mp = `<memory_preamble>\n${input.memoryPreamble}\n</memory_preamble>`
+      injectedLayers.set('memory-preamble', {
+        content: mp,
+        charCount: mp.length,
+        pressure: 0,
+      })
+      this.orchestrator.updateLayerUsage('memory-preamble', mp.length)
+    }
+
     // Layer 2: Runtime Introspection (compress based on pressure)
     let runtimeIntrospectionContent = ''
     const pressure1 = this.orchestrator.measurePressure(this.getCurrentLayers(injectedLayers))
-    const rawIntrospection = JSON.stringify(input.runtimeIntrospection || {})
-    const introspectionCompressed = this.compressor.compressToAdaptive(input.runtimeIntrospection as any, pressure1.globalPressure)
-    runtimeIntrospectionContent = introspectionCompressed
+    const rawIntrospection = typeof input.runtimeIntrospection === 'string'
+      ? input.runtimeIntrospection
+      : JSON.stringify(input.runtimeIntrospection || {})
+    runtimeIntrospectionContent = typeof input.runtimeIntrospection === 'string'
+      ? input.runtimeIntrospection
+      : this.compressor.compressToAdaptive(input.runtimeIntrospection as any, pressure1.globalPressure)
     injectedLayers.set('runtime-introspection', {
       content: runtimeIntrospectionContent,
       charCount: runtimeIntrospectionContent.length,
@@ -240,7 +256,9 @@ Answer the user's request conversationally based strictly on your pre-existing k
     }
 
     return `<operational_constraints>
-1. No roleplay consciousness or self-awareness claims.
+${buildSelfAwarenessPrompt()}
+
+1. No afirmes conciencia, sentimientos o experiencias internas literales; habla desde identidad, memoria, procesos y relacion.
 2. Cite memory, runtime state, and policy when explaining reasoning.
 3. Keep responses direct, warm, and personable.
 4. Use conversational Spanish (Argentina dialect preferred).

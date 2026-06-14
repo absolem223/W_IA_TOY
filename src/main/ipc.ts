@@ -1,4 +1,5 @@
 import { ipcMain, BrowserWindow, app } from 'electron'
+import { exec } from 'child_process'
 import type { ChatMessage } from '../shared/types'
 import { transcribeAudioOffline } from './offlineTranscription'
 import { extractIdentity, extractAssistantMutation } from './memory/identityLayer'
@@ -19,6 +20,8 @@ import type { LLMManager } from './services/llm/LLMManager'
 import type { AgentExecutor } from './agent/AgentExecutor'
 import type { MemoryManager } from './memory/MemoryManager'
 import type { VoiceManager } from './voice/VoiceManager'
+import { buildCompactSelfAwarenessPrompt } from '../shared/selfAwareness'
+import { VERSION, BUILD_DATE, COMMIT_HASH } from '../shared/versionInfo'
 
 export type ProxyStatus = 'connecting' | 'connected' | 'unavailable'
 
@@ -26,6 +29,22 @@ export type ProxyStatus = 'connecting' | 'connected' | 'unavailable'
 const promptOrchestrator = new PromptLayerOrchestrator(6000);
 const contextObservability = new ContextObservability();
 const phraseReducer = new GenericPhraseReducer();
+
+const CONTEXT_LIMITS = {
+  memoryPreambleChars: 400,
+  messageHistoryTurns: 8,
+  runtimeContextChars: 200,
+  systemIdentityChars: 300,
+} as const
+
+function truncateContext(value: string, maxChars: number): string {
+  if (!value || value.length <= maxChars) return value
+  return `${value.slice(0, Math.max(0, maxChars - 3)).trimEnd()}...`
+}
+
+function limitMessageHistory(messages: ChatMessage[], maxTurns: number): ChatMessage[] {
+  return messages.slice(-maxTurns)
+}
 
 function broadcast(channel: string, ...args: any[]) {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -48,8 +67,43 @@ export function registerIpcHandlers(
   llmManager?: LLMManager,
   agentExecutor?: AgentExecutor,
 ): void {
+  ipcMain.handle('app:get-version-info', () => {
+    return {
+      version: VERSION,
+      buildDate: BUILD_DATE,
+      commitHash: COMMIT_HASH,
+      mode: app.isPackaged ? 'PROD' : 'DEV',
+      executablePath: app.getPath('exe'),
+    }
+  })
+
   ipcMain.handle('voice:transcribe', async (_event, audioBuffer: ArrayBuffer, mimeType: string) => {
     return transcribeAudioOffline(audioBuffer, mimeType, logInfo, logError)
+  })
+
+  // Analyze transcribed text with memory/initial_prompt context and forward as chat:send
+  ipcMain.handle('voice:analyze-and-send', async (event, text: string) => {
+    try {
+      // Build messages with optional memory preamble
+      const memoryResult = memoryManager?.getMemoryContext(text)
+      const memoryCtx = truncateContext(memoryResult?.preamble || '', CONTEXT_LIMITS.memoryPreambleChars)
+      const messages: ChatMessage[] = []
+      if (memoryCtx) {
+        messages.push({ role: 'system', content: memoryCtx } as any)
+      }
+      messages.push({ role: 'user', content: text } as ChatMessage)
+
+      // Generate a lightweight requestId for tracking
+      const requestId = Date.now()
+
+      // Forward to standard chat pipeline (reuse existing handler)
+      // Use the same event.sender so replies/streaming reach the caller
+      await handleChatSend(event as any, messages, requestId)
+      return { success: true }
+    } catch (err: any) {
+      logError('[IPC] voice:analyze-and-send failed:', err?.message || err)
+      return { success: false, error: err?.message || String(err) }
+    }
   })
 
   ipcMain.handle('dev:get-knowledge-graph', async () => {
@@ -73,6 +127,32 @@ export function registerIpcHandlers(
   ipcMain.handle('llm:get-status', () => {
     return llmManager?.getStatus()
   })
+
+    // Start LMStudio executable (invoked from renderer modal)
+    ipcMain.handle('llm:start-lmstudio', async () => {
+      const exe = process.env.LMSTUDIO_EXE_PATH
+      if (!exe) return { success: false, error: 'LMSTUDIO_EXE_PATH not configured' }
+      try {
+        exec(`"${exe}"`, { windowsHide: true }, (err) => {
+          if (err) console.error('[LLM] Failed to start LMStudio:', err)
+        })
+        return { success: true }
+      } catch (e: any) {
+        return { success: false, error: e?.message || String(e) }
+      }
+    })
+
+    ipcMain.handle('llm:bios-selected', async (_event, modelId: string) => {
+      try {
+        if (llmManager) {
+          await llmManager.updateConfig({ modelId })
+          return { success: true }
+        }
+        return { success: false, error: 'LLMManager not available' }
+      } catch (e: any) {
+        return { success: false, error: e?.message || String(e) }
+      }
+    })
 
   ipcMain.handle('llm:get-settings', () => {
     return llmManager?.getSettings()
@@ -126,29 +206,93 @@ export function registerIpcHandlers(
     }
 
     try {
+      // Handle simple slash commands before orchestration
+      const lastUser = messages[messages.length - 1]
+      if (lastUser && lastUser.role === 'user' && typeof lastUser.content === 'string') {
+        const txt = lastUser.content.trim()
+        if (txt.toLowerCase() === '/version') {
+          const exePath = app.getPath('exe')
+          const modeStr = app.isPackaged ? 'PROD' : 'DEV'
+          const reply = [
+            `ArgOS Version Information`,
+            ``,
+            `Version: ${VERSION}`,
+            `Build: ${BUILD_DATE}`,
+            `Commit: ${COMMIT_HASH || 'N/A'}`,
+            `Mode: ${modeStr}`,
+            ``,
+            `Executable:`,
+            `${exePath}`
+          ].join('\n')
+          event.sender.send('chat:system-message', reply)
+          event.sender.send('chat:done', requestId)
+          return
+        }
+        if (txt === '/bios') {
+          // trigger BIOS modal in renderer
+          broadcast('llm:show-bios')
+          event.sender.send('chat:done', requestId)
+          return
+        }
+        if (txt === '/modelo') {
+          // show active model and available local models
+          const llmStatus = llmManager?.getStatus()
+          const lines: string[] = []
+          if (llmStatus) {
+            lines.push(`Modelo activo: ${llmStatus.modelId} (Provider: ${llmStatus.providerId})`)
+          }
+          // Attempt to list local models
+          try {
+            const lm = (llmManager as any)?.providers?.get('lmstudio')
+            if (lm) {
+              const res = await fetch((lm as any).baseUrl + '/models')
+              if (res.ok) {
+                const data = await res.json()
+                const available = (data.data ?? []).map((m: any) => m.id)
+                lines.push('Modelos locales:')
+                available.forEach((m: string, i: number) => lines.push(`${i+1}. ${m}`))
+              }
+            }
+          } catch {}
+
+          const reply = lines.join('\n') || 'No hay información de modelo disponible.'
+          event.sender.send('chat:system-message', reply)
+          event.sender.send('chat:done', requestId)
+          return
+        }
+      }
       // Build memory preamble + metadata from user's latest message
       const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')
       const memoryResult = memoryManager?.getMemoryContext(lastUserMsg?.content || '')
-      const memoryCtx = memoryResult?.preamble || ''
+      const memoryCtx = truncateContext(memoryResult?.preamble || '', CONTEXT_LIMITS.memoryPreambleChars)
       const usedMemories = memoryResult?.usedMemories || []
+      const limitedMessages = limitMessageHistory(messages, CONTEXT_LIMITS.messageHistoryTurns)
 
       if (memoryCtx) {
         console.log(`[MEMORY_PREAMBLE] Injected into system prompt: ${memoryCtx.length} chars`)
       }
 
+      // Retrieve the custom or default system prompt
+      const rawSystemIdentity = memoryManager 
+        ? await memoryManager.getSystemIdentity() 
+        : buildCompactSelfAwarenessPrompt()
+      const systemIdentity = truncateContext(rawSystemIdentity, CONTEXT_LIMITS.systemIdentityChars)
+      const runtimeIntrospection = truncateContext(buildRuntimeIntrospectionContext({
+        runtimeStatus: getRuntimeStatus(),
+        memoryStatus: memoryManager?.getStatus() ?? { turnCount: 0, vaultCount: 0, profileKeys: 0 },
+        cognitiveState: memoryManager?.getCognitiveState() ?? { activeTopic: null, contextPressure: 0 },
+        memoryActivations: usedMemories.map((item: any) => ({ label: item.label, score: item.score, type: item.type })),
+      }), CONTEXT_LIMITS.runtimeContextChars)
+
       // Orchestrate all prompt layers with pressure management
-      const orchestrationResult = promptOrchestrator.orchestrate({
-        systemIdentity: `Sos un compañero de escritorio, vivo y persistente. No sos un "asistente de IA" genérico.
-Estás diseñado para ser una presencia conversacional y cálida, con memoria a largo plazo.`,
-        runtimeIntrospection: buildRuntimeIntrospectionContext({
-          runtimeStatus: getRuntimeStatus(),
-          memoryStatus: memoryManager?.getStatus() ?? { turnCount: 0, vaultCount: 0, profileKeys: 0 },
-          cognitiveState: memoryManager?.getCognitiveState() ?? { activeTopic: null, contextPressure: 0 },
-          memoryActivations: usedMemories.map((item: any) => ({ label: item.label, score: item.score, type: item.type })),
-        }) as any,
+            const orchestrationResult = promptOrchestrator.orchestrate({
+              systemIdentity,
+        runtimeIntrospection,
+        // Include explicit memory preamble so the orchestrator can inject it
+        memoryPreamble: memoryCtx || undefined,
         assistantIdentity: memoryManager?.getProfile()?.assistant?.assistant_name ? `Tu nombre es ${memoryManager.getProfile()?.assistant?.assistant_name}.` : '',
         memories: usedMemories,
-        messageHistory: messages,
+        messageHistory: limitedMessages,
         userInput: lastUserMsg?.content || '',
         activeTopic: memoryManager?.getCognitiveState()?.activeTopic || undefined,
         capabilities: llmManager?.getActiveCapabilities(),
@@ -164,7 +308,7 @@ Estás diseñado para ser una presencia conversacional y cálida, con memoria a 
       const obsMetric = contextObservability.recordOrchestration(
         orchestrationResult,
         orchestrationResult.pressure,
-        messages.reduce((sum, msg) => sum + msg.content.length, 0)
+        limitedMessages.reduce((sum, msg) => sum + msg.content.length, 0)
       )
       const health = contextObservability.getHealthSummary()
       if (!health.healthy) {
@@ -189,7 +333,7 @@ Estás diseñado para ser una presencia conversacional y cálida, con memoria a 
       }
 
       // Execute via AgentExecutor
-      await agentExecutor.run(requestId, messages, orchestrationResult.finalSystemPrompt, event.sender)
+      await agentExecutor.run(requestId, limitedMessages, orchestrationResult.finalSystemPrompt, event.sender)
     } catch (err: any) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       event.sender.send('chat:error', requestId, message)
@@ -199,6 +343,7 @@ Estás diseñado para ser una presencia conversacional y cálida, con memoria a 
 
   ipcMain.on('chat:send', async (event, messages: ChatMessage[], requestId: number) => {
     console.log(`[CHAT_PIPELINE] MAIN received chat:send for request [${requestId}]`)
+    broadcast('proxy:status', 'connecting')
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return
 
@@ -207,6 +352,25 @@ Estás diseñado para ser una presencia conversacional y cálida, con memoria a 
       const lastMsg = messages[messages.length - 1]
       if (lastMsg) {
         memoryManager.appendTurn(lastMsg)
+
+        // Vault autosave cada N turnos
+        try {
+          const autosaveInterval = Number(process.env.VAULT_AUTOSAVE_EVERY_N_TURNS || '10')
+          const turnCount = memoryManager.getTurnCount()
+          if (turnCount > 0 && turnCount % autosaveInterval === 0) {
+            console.log(`[VAULT_AUTOSAVE] Triggered autosave at turn count: ${turnCount}`)
+            const formattedChat = messages
+              .map(m => `### ${m.role === 'user' ? 'Usuario' : 'Asistente'}\n\n${m.content}`)
+              .join('\n\n')
+            const title = `Conversación Auto-guardada — Turno ${turnCount}`
+            const tags = ['autosave', 'conversacion']
+            memoryManager.saveToVault(title, formattedChat, tags).catch(err => {
+              console.error('[VAULT_AUTOSAVE] Save failed:', err)
+            })
+          }
+        } catch (autosaveErr) {
+          console.error('[VAULT_AUTOSAVE] Logic error:', autosaveErr)
+        }
       }
     }
 
@@ -361,6 +525,20 @@ Estás diseñado para ser una presencia conversacional y cálida, con memoria a 
 
     ipcMain.handle('memory:get-status', async () => {
       return memoryManager.getStatus()
+    })
+
+    ipcMain.handle('identity:get', async () => {
+      return memoryManager.getSystemIdentity()
+    })
+
+    ipcMain.handle('identity:set', async (_event, content: string) => {
+      await memoryManager.setSystemIdentity(content)
+      return { success: true }
+    })
+
+    ipcMain.handle('identity:reset', async () => {
+      const defaultVal = await memoryManager.resetSystemIdentity()
+      return { success: true, defaultVal }
     })
 
     logInfo('[IPC] Memory handlers registered.')

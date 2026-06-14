@@ -8,5 +8,5 @@
     "skipLibCheck": true,
     "outDir": "out-cognitive"
   },
-  "include": ["src/cognitive/**/*", "tests/cognitive/**/*"]
+  "include": ["src/cognitive/**/*", "src/shared/**/*", "tests/cognitive/**/*"]
 }

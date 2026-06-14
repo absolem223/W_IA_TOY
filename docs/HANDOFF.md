@@ -110,6 +110,7 @@ stateDiagram-v2
 
 ## Hitos Completados
 
+- **Flujo de Desarrollo y Acceso Directo** (2026-06-13): Script de PowerShell `create-shortcut.ps1` dinámico, scripts `shortcut` y `start` en `package.json`, e inlining de `NODE_ENV` en `electron.vite.config.ts`.
 - **Migración npm → pnpm** (2026-06-13): Eliminado `package-lock.json`, generado `pnpm-lock.yaml`, actualizados todos los scripts del proyecto. Todos los comandos del proyecto ahora usan `pnpm`.
 - **Fase 2 - MediaRecorderProvider**: Implementada y validada la capa física de captura de audio.
 - **Stage 12 - Security baseline**: Env handling y protección de API keys.
@@ -119,13 +120,14 @@ stateDiagram-v2
 ## Siguiente Sesión — Puntos de Entrada
 
 1. **Prueba manual completa**:
-   - Instalar SoX (`choco install sox -y` o descarga manual)
-   - Arrancar LM Studio en `http://localhost:1234` con un modelo cargado
-   - Ejecutar `pnpm start`
-   - Verificar que el widget abre, el chat funciona, y el dictado por voz captura audio real
+   - Instalar SoX (`choco install sox -y` o descarga manual).
+   - Arrancar LM Studio en `http://localhost:1234` con un modelo cargado.
+   - Ejecutar `pnpm run shortcut` para crear el acceso directo en el Escritorio.
+   - Ejecutar `pnpm start` (o lanzar mediante el acceso directo "Argos") para probar el modo de producción.
+   - Verificar que el widget abre, el chat funciona, y el dictado por voz captura audio real.
 
 2. **Fase 3: Argos Voice Overlay** (próxima tarea):
-   - Ventana flotante desacoplada para visualizar el dictado
-   - Indicador de micrófono palpitante, barra de estado
-   - Muestra del transcript antes de inyectarse en el chat
+   - Ventana flotante desacoplada para visualizar el dictado.
+   - Indicador de micrófono palpitante, barra de estado.
+   - Muestra del transcript antes de inyectarse en el chat.
 

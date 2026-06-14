@@ -1,5 +1,7 @@
 import type { ChatMessage } from '../shared/types'
 import type { RuntimeStatusReport } from '../shared/runtime'
+import type { VersionInfo } from '../shared/versionTypes'
+
 
 // Typed declaration of the context bridge exposed by preload/index.ts
 interface ElectronAPI {
@@ -51,6 +53,7 @@ interface ElectronAPI {
   voicePlaybackStarted: (requestId: string) => void
   voicePlaybackEnded:   (requestId: string, durationMs: number) => void
   voicePlaybackError:   (requestId: string, error: string) => void
+  voiceAnalyzeAndSend:  (text: string) => Promise<{ success: boolean; error?: string }>
 
   // Agent loop and tool execution approvals
   onAgentLoop: (cb: (data: any) => void) => () => void
@@ -63,6 +66,13 @@ interface ElectronAPI {
   devGetKnowledgeGraph: () => Promise<any>
   devGetKnowledgeMetrics: () => Promise<any>
   onContextAssemblyTrace: (cb: (trace: any) => void) => () => void
+
+  identityGet: () => Promise<string>
+  identitySet: (content: string) => Promise<{ success: boolean }>
+  identityReset: () => Promise<{ success: boolean; defaultVal: string }>
+  onLLMStatus: (cb: (status: any) => void) => () => void
+  onModelInfo: (cb: (requestId: number, info: any) => void) => () => void
+  getVersionInfo: () => Promise<VersionInfo>
 }
 
 declare global {

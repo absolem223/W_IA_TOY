@@ -3,11 +3,12 @@ import { MessageBubble } from './MessageBubble'
 import { TypingIndicator } from './TypingIndicator'
 import { MemoryUsageIndicator } from './MemoryUsageIndicator'
 import type { ChatMessage } from '../../shared/types'
-import type { MemoryUsedItem } from '../hooks/useChat'
+import type { MemoryUsedItem, ChatState } from '../hooks/useChat'
 
 interface Props {
   messages:      ChatMessage[]
   isStreaming:    boolean
+  chatState?:     ChatState
   usedMemories?: MemoryUsedItem[]
   agentStatus?:   string | null
 }
@@ -15,7 +16,15 @@ interface Props {
 /** Scroll throttle interval en ms — invisible para el ojo pero elimina el scroll nervioso */
 const SCROLL_THROTTLE_MS = 120
 
-export function MessageList({ messages, isStreaming, usedMemories = [], agentStatus }: Props): React.ReactElement {
+// Frases del thinking state — se rotan de forma determinística por índice de mensaje
+const THINKING_PHRASES = [
+  'Déjamelo pensar…',
+  'Un momento…',
+  'Procesando…',
+  'Dame un segundo…',
+]
+
+export function MessageList({ messages, isStreaming, chatState, usedMemories = [], agentStatus }: Props): React.ReactElement {
   const bottomRef     = useRef<HTMLDivElement>(null)
   const lastScrollRef = useRef<number>(0)
   const rafRef        = useRef<number | null>(null)
@@ -47,7 +56,7 @@ export function MessageList({ messages, isStreaming, usedMemories = [], agentSta
       }, 80)
       return () => clearTimeout(t)
     }
-  }, [messages, isStreaming, scrollToBottom])
+  }, [messages, isStreaming, chatState, scrollToBottom])
 
   // Limpieza del timeout pendiente al desmontar
   useEffect(() => {
@@ -64,6 +73,14 @@ export function MessageList({ messages, isStreaming, usedMemories = [], agentSta
 
   // Show memory indicator before the last assistant message when streaming
   const showMemoryIndicator = usedMemories.length > 0 && isStreaming
+
+  // Thinking phrase determinístico por cantidad de mensajes
+  const thinkingPhrase = THINKING_PHRASES[messages.length % THINKING_PHRASES.length]
+
+  // chatState === 'thinking': waiting for first token (no content yet)
+  const isThinking = chatState === 'thinking'
+  // chatState === 'streaming': tokens arriving (show typing dots)
+  const isStreamingTokens = chatState === 'streaming'
 
   return (
     <div className="message-list">
@@ -85,7 +102,24 @@ export function MessageList({ messages, isStreaming, usedMemories = [], agentSta
           />
         </React.Fragment>
       ))}
-      {isStreaming && <TypingIndicator status={agentStatus || undefined} />}
+
+      {/* Thinking state: pre-first-token — mostrar frase + pulso ámbar */}
+      {isThinking && (
+        <div className="message message--assistant message--thinking delay-v1" aria-live="polite">
+          <div className="message__bubble-wrapper">
+            <div className="thinking-bubble">
+              <span className="thinking-bubble__text">{thinkingPhrase}</span>
+              <span className="thinking-bubble__dot" />
+              <span className="thinking-bubble__dot" />
+              <span className="thinking-bubble__dot" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Streaming state: tokens arriving — typing dots */}
+      {isStreamingTokens && <TypingIndicator status={agentStatus || undefined} />}
+
       <div ref={bottomRef} />
     </div>
   )

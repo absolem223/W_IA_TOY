@@ -40,18 +40,24 @@ export function MemoryPanel({ isClosing = false }: Props): React.ReactElement {
   const [vault, setVault] = useState<VaultEntry[]>([])
   const [editingKey, setEditingKey] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
+  const [systemPrompt, setSystemPrompt] = useState('')
+  const [isEditingPrompt, setIsEditingPrompt] = useState(false)
+  const [promptEditVal, setPromptEditVal] = useState('')
+  const [llmStatus, setLlmStatus] = useState<any>(null)
 
   const refresh = useCallback(async () => {
     try {
-      const [s, p, v] = await Promise.all([
+      const [s, p, v, promptVal] = await Promise.all([
         window.electronAPI.memoryGetStatus(),
         window.electronAPI.memoryGetProfile(),
         window.electronAPI.memoryGetVault(),
+        window.electronAPI.identityGet(),
       ])
       setStatus(s)
       setProfile((p.profile || {}) as Record<string, ProfileEntry>)
       setAssistant((p as any).assistant || {})
       setVault(v)
+      setSystemPrompt(promptVal)
     } catch (err) {
       console.error('[MemoryPanel] Failed to load:', err)
     }
@@ -64,6 +70,36 @@ export function MemoryPanel({ isClosing = false }: Props): React.ReactElement {
     const offSync = window.electronAPI.onMemorySync(() => refresh())
     return () => { offSaved(); offSync(); }
   }, [refresh])
+
+  useEffect(() => {
+    window.electronAPI.getRuntimeStatus().then((s: any) => {
+      setLlmStatus({
+        providerId: s.inferenceProvider,
+        modelId: s.activeModel,
+      })
+    }).catch(() => {})
+
+    const offLLM = window.electronAPI.onLLMStatus((status: any) => {
+      setLlmStatus(status)
+    })
+    return () => { offLLM(); }
+  }, [])
+
+  const handleSavePrompt = async () => {
+    await window.electronAPI.identitySet(promptEditVal)
+    setSystemPrompt(promptEditVal)
+    setIsEditingPrompt(false)
+    refresh()
+  }
+
+  const handleResetPrompt = async () => {
+    if (window.confirm('¿Seguro que querés restablecer el system prompt al valor por defecto?')) {
+      const res = await window.electronAPI.identityReset()
+      setSystemPrompt(res.defaultVal)
+      setIsEditingPrompt(false)
+      refresh()
+    }
+  }
 
   const handleDelete = async (id: string) => {
     await window.electronAPI.memoryDelete(id)
@@ -121,8 +157,43 @@ export function MemoryPanel({ isClosing = false }: Props): React.ReactElement {
             <span className="memory-entry__value" style={{ fontStyle: assistant.assistant_name ? 'normal' : 'italic', opacity: assistant.assistant_name ? 1 : 0.5 }}>
               {assistant.assistant_name || 'Argos (default)'}
             </span>
-            {assistant.speaking_style && (
-              <span className="memory-entry__badge memory-entry__badge--high" style={{ opacity: 0.7 }}>{assistant.speaking_style}</span>
+          </div>
+          {assistant.speaking_style && (
+            <div className="memory-entry">
+              <span className="memory-entry__key">estilo al hablar</span>
+              <span className="memory-entry__value">{assistant.speaking_style}</span>
+            </div>
+          )}
+
+          <div className="memory-entry memory-entry--prompt" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '6px', marginTop: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <span className="memory-entry__key" style={{ fontWeight: 'bold' }}>system prompt</span>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                {!isEditingPrompt ? (
+                  <>
+                    <button className="memory-btn memory-btn--small" onClick={() => { setIsEditingPrompt(true); setPromptEditVal(systemPrompt); }} title="Editar prompt">✎</button>
+                    <button className="memory-btn memory-btn--small" onClick={handleResetPrompt} title="Restablecer prompt">Reset</button>
+                  </>
+                ) : (
+                  <>
+                    <button className="memory-btn memory-btn--small" onClick={handleSavePrompt}>✓</button>
+                    <button className="memory-btn memory-btn--small" onClick={() => setIsEditingPrompt(false)}>✕</button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {isEditingPrompt ? (
+              <textarea
+                className="memory-entry__input"
+                style={{ width: '100%', minHeight: '60px', resize: 'vertical', fontSize: '11px', fontFamily: 'inherit', padding: '4px' }}
+                value={promptEditVal}
+                onChange={e => setPromptEditVal(e.target.value)}
+              />
+            ) : (
+              <span className="memory-entry__value" style={{ fontSize: '10.5px', opacity: 0.8, whiteSpace: 'pre-wrap', lineHeight: '1.4', background: 'rgba(255,255,255,0.03)', padding: '6px', borderRadius: '4px', width: '100%', boxSizing: 'border-box' }}>
+                {systemPrompt}
+              </span>
             )}
           </div>
         </section>
@@ -207,6 +278,12 @@ export function MemoryPanel({ isClosing = false }: Props): React.ReactElement {
               <span>Initialized</span><span>{status.initialized ? '✓' : '✕'}</span>
               <span>Migrated</span><span>{status.migrated ? '✓' : '—'}</span>
               <span>Session turns</span><span>{status.turnCount}</span>
+              {llmStatus && (
+                <>
+                  <span>LLM Provider</span><span>{llmStatus.providerId || '—'}</span>
+                  <span>Active Model</span><span style={{ fontSize: '10.5px', wordBreak: 'break-all' }}>{llmStatus.modelId || '—'}</span>
+                </>
+              )}
             </div>
           </section>
         )}

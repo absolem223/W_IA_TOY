@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { ChatMessage } from '../shared/types'
 import type { RuntimeStatusReport } from '../shared/runtime'
+import type { VersionInfo } from '../shared/versionTypes'
 
 console.log('PRELOAD OK: Script has executed.');
 
@@ -129,6 +130,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('chat:memory-used', handler)
   },
 
+  // System-level visible messages: inserted into chat as system messages
+  onSystemMessage: (cb: (text: string) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, text: string) => cb(text)
+    ipcRenderer.on('chat:system-message', handler)
+    return () => ipcRenderer.removeListener('chat:system-message', handler)
+  },
+
+  // Short-lived status alerts (toasts) from main (e.g., LLM provider changes)
+  onLLMStatusAlert: (cb: (text: string) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, text: string) => cb(text)
+    ipcRenderer.on('llm:status-alert', handler)
+    return () => ipcRenderer.removeListener('llm:status-alert', handler)
+  },
+
+  // Show BIOS modal request from main
+  onShowBios: (cb: () => void) => {
+    const handler = () => cb()
+    ipcRenderer.on('llm:show-bios', handler)
+    return () => ipcRenderer.removeListener('llm:show-bios', handler)
+  },
+
+  // Start LMStudio executable via main process
+  startLMStudio: () => ipcRenderer.invoke('llm:start-lmstudio'),
+
+  // Send BIOS selection (modelId) to main process
+  sendBiosSelection: (modelId: string) => ipcRenderer.invoke('llm:bios-selected', modelId),
+
   onCognitiveState: (cb: (state: { activeTopic: string | null; contextPressure: number }) => void) => {
     const handler = (_: Electron.IpcRendererEvent, state: { activeTopic: string | null; contextPressure: number }) => cb(state)
     ipcRenderer.on('chat:cognitive-state', handler)
@@ -223,6 +251,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   voicePlaybackError: (requestId: string, error: string) =>
     ipcRenderer.send('voice:playback-error', requestId, error),
 
+  // Analyze a transcribed text using runtime initial_prompt/context and send to agent
+  voiceAnalyzeAndSend: (text: string) =>
+    ipcRenderer.invoke('voice:analyze-and-send', text),
+
   // ── DevTools ──
   devGetKnowledgeGraph: () => ipcRenderer.invoke('dev:get-knowledge-graph'),
   devGetKnowledgeMetrics: () => ipcRenderer.invoke('dev:get-knowledge-metrics'),
@@ -230,5 +262,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_: Electron.IpcRendererEvent, trace: any) => cb(trace)
     ipcRenderer.on('dev:context-assembly-trace', handler)
     return () => ipcRenderer.removeListener('dev:context-assembly-trace', handler)
-  }
+  },
+
+  identityGet: () =>
+    ipcRenderer.invoke('identity:get'),
+
+  identitySet: (content: string) =>
+    ipcRenderer.invoke('identity:set', content),
+
+  identityReset: () =>
+    ipcRenderer.invoke('identity:reset'),
+
+  onLLMStatus: (cb: (status: any) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, status: any) => cb(status)
+    ipcRenderer.on('llm:status', handler)
+    return () => ipcRenderer.removeListener('llm:status', handler)
+  },
+
+  onModelInfo: (cb: (requestId: number, info: any) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, requestId: number, info: any) => cb(requestId, info)
+    ipcRenderer.on('chat:model-info', handler)
+    return () => ipcRenderer.removeListener('chat:model-info', handler)
+  },
+
+  getVersionInfo: () =>
+    ipcRenderer.invoke('app:get-version-info') as Promise<VersionInfo>
 })

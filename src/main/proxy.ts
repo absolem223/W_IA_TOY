@@ -1,5 +1,6 @@
 import http from 'http'
 import type { AddressInfo } from 'net'
+import { app } from 'electron'
 import type { ChatMessage } from '../shared/types'
 import { ProviderDiagnostics } from './providerDiagnostics'
 import { GenericPhraseReducer } from './genericPhraseReducer'
@@ -162,7 +163,7 @@ async function streamOpenRouter(
 - Current Time: ${now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
 - Timezone: ${tz}
 - Session Uptime: ${uptimeMinutes} minutes
-- App Version: 0.1.0
+- App Version: ${app.getVersion()}
 </runtime_context>`
   
   // Use orchestrated system prompt, fallback to SYSTEM_PROMPT if not provided

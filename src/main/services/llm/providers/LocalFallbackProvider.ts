@@ -33,7 +33,7 @@ export class LocalFallbackProvider implements InferenceProvider {
     onChunk: (chunk: ChatCompletionChunk) => void
   ): Promise<{ finishReason: string; model: string; latencyMs: number; tokenUsageEstimate: number }> {
     const start = Date.now()
-    const fallbackText = 'No se pudo establecer conexión con los proveedores de inferencia (LM Studio local / OpenRouter). Verificá tu conexión de red o que LM Studio esté iniciado en el puerto 1234.'
+    const fallbackText = 'Estoy en modo reducido ahora mismo. Mi memoria e identidad siguen presentes, pero necesito que una herramienta cognitiva vuelva a estar disponible para responder con profundidad.'
 
     const chunkSize = 15
     for (let i = 0; i < fallbackText.length; i += chunkSize) {

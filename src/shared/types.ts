@@ -15,5 +15,13 @@ export interface ChatMessage {
       type: 'concept' | 'multimedia' | 'document' | 'memory'
     }>
     sessionType?: string
+    /** True when this user message was sourced from a voice transcription */
+    fromVoice?: boolean
+    modelInfo?: {
+      provider: string
+      model: string
+      timestamp: number
+      fallbackReason?: string
+    }
   }
 }

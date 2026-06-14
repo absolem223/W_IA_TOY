@@ -11,6 +11,7 @@ import type { OAuthSessionManager } from '../oauth/OAuthSessionManager'
 import type { RetrievalOrchestrator } from '../retrieval/RetrievalOrchestrator'
 import type { CapabilityContext } from '../tools/types'
 import { globalAgentRuntime } from './AgentState'
+import { ToolRouter } from './ToolRouter'
 
 export interface AgentSession {
   sessionId: string
@@ -445,7 +446,14 @@ export class AgentExecutor {
     loopTraceId = 'unknown'
   ): Promise<void> {
     const MAX_RECURSIONS = 5
-    const TIMEOUT_BUDGET_MS = 45000
+    // Determine timeout budget based on active provider (local providers may be slower)
+    const activeProviderId = this.llmManager.getStatus().providerId
+    const providers = this.llmManager.getProviders()
+    const activeProvider = providers.find(p => p.id === activeProviderId)
+    const isLocal = activeProvider?.type === 'local'
+    const localTimeout = Number(process.env.LLM_TIMEOUT_LOCAL_MS || 120000)
+    const cloudTimeout = Number(process.env.LLM_TIMEOUT_CLOUD_MS || 45000)
+    const TIMEOUT_BUDGET_MS = isLocal ? localTimeout : cloudTimeout
     const startTimeLoop = Date.now()
 
     // Defensive: guard against a null session (could happen during recovery races)
@@ -486,11 +494,13 @@ export class AgentExecutor {
       }
     }
 
+    let lastCompletion: any = null
+
     while (session.recursions < MAX_RECURSIONS) {
       if (signal.aborted) return
 
       if (Date.now() - startTimeLoop > TIMEOUT_BUDGET_MS) {
-        console.warn(`[AGENT] Timeout budget (${TIMEOUT_BUDGET_MS}ms) exceeded.`)
+        console.warn(`[AGENT] Timeout budget (${TIMEOUT_BUDGET_MS}ms) exceeded for provider=${activeProviderId}`)
         this.logSessionError('Timeout budget exceeded')
         break
       }
@@ -501,8 +511,12 @@ export class AgentExecutor {
       let responseBuffer = ''
       sentenceBuffer = ''
 
-      // Capability Match: Negotiating tools usage
-      const activeTools = (capabilities.tools && !this.safeMode) ? tools : []
+      // Capability Match: Negotiating tools usage via ToolRouter
+      const userQuery = [...session.messages].reverse().find((m: ChatMessage) => m.role === 'user')?.content ?? session.objective ?? ''
+      const toolRouter = new ToolRouter(this.toolRegistry, this.llmManager, { log: (...a) => console.log(...a) })
+      const activeTools = (capabilities.tools && !this.safeMode)
+        ? toolRouter.selectTools(userQuery, tools, 4)
+        : []
 
       const llmRequestStart = Date.now()
       console.log(`[AGENT_TRACE] LLM_REQUEST_DISPATCHED loopTraceId=${loopTraceId} provider=${this.llmManager.getStatus().providerId} model=${this.llmManager.getStatus().modelId} tools=${activeTools.length} sysPromptChars=${systemPrompt?.length ?? 0} msgCount=${session.messages.length}`)
@@ -575,6 +589,7 @@ export class AgentExecutor {
           }
         }
       )
+      lastCompletion = completionResult
 
       if (signal.aborted) return
 
@@ -648,6 +663,21 @@ export class AgentExecutor {
     // Finished running Agent Loop
     this.updateSessionPhase(session, 'responding')
     globalAgentRuntime.setPhase('responding')
+
+    if (lastCompletion) {
+      const preFallback = (this.llmManager as any).getPreFallbackSettings ? (this.llmManager as any).getPreFallbackSettings() : null
+      let fallbackReason = undefined
+      if (preFallback) {
+        fallbackReason = `El proveedor principal '${preFallback.providerId}' (${preFallback.modelId}) falló. Se usó '${lastCompletion.providerId}' (${lastCompletion.model}) como fallback.`
+      }
+
+      eventSender.send('chat:model-info', requestId, {
+        provider: lastCompletion.providerId,
+        model: lastCompletion.model,
+        timestamp: Date.now(),
+        fallbackReason
+      })
+    }
 
     // Speak final chunk
       if (this.voiceManager && this.voiceManager.getStatus().enabled && !this.voiceManager.getStatus().muted) {

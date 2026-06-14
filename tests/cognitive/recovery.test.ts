@@ -7,6 +7,7 @@ import { join } from 'path'
 const mockElectron = {
   app: {
     getPath: () => './temp-user-data-test',
+    getVersion: () => '1.0.0',
   },
   BrowserWindow: {
     getAllWindows: () => [],

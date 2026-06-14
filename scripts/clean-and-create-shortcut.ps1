@@ -1,49 +1,51 @@
-$desktopPath = [System.Environment]::GetFolderPath('Desktop')
-$startMenuPath = [System.Environment]::GetFolderPath('StartMenu')
-$currentDir = Get-Location
+# =============================================================================
+#  ArgOS - Desktop Shortcut Manager
+# =============================================================================
 
-Write-Host "--- Argos Desktop Shortcut Manager ---"
+$DESKTOP      = [Environment]::GetFolderPath("Desktop")
+$WORKSPACE    = "C:\Users\Nahuel\.gemini\antigravity\scratch\widget-ia-toy"
+$ARGOS_EXE    = "$WORKSPACE\dist\win-unpacked\Argos.exe"
+$LAUNCHER_CMD = "$WORKSPACE\ArgOS Launcher.cmd"
+$ICON_ICO     = "$WORKSPACE\resources\icon.ico"
+$ICON_SOURCE  = if (Test-Path $ICON_ICO) { $ICON_ICO } else { $ARGOS_EXE }
 
-# 1. Clean up old/legacy shortcuts
-Write-Host "Cleaning up legacy shortcuts..."
-$oldShortcuts = @(
-    "ArgOS.lnk",
-    "Argos.lnk",
-    "Widget IA Toy.lnk",
-    "Widget IA.lnk",
-    "ArgOS Launcher.lnk"
-)
+function Write-Ok($msg)   { Write-Host "  [OK] $msg" -ForegroundColor Green }
+function Write-Warn($msg) { Write-Host "  [WARN] $msg" -ForegroundColor Yellow }
+function Write-Err($msg)  { Write-Host "  [ERROR] $msg" -ForegroundColor Red }
 
-foreach ($name in $oldShortcuts) {
-    $desktopShortcut = Join-Path $desktopPath $name
-    if (Test-Path $desktopShortcut) {
-        Remove-Item -Path $desktopShortcut -Force
-        Write-Host "Removed legacy desktop shortcut: $desktopShortcut"
-    }
+$Shell = New-Object -ComObject WScript.Shell
 
-    $startShortcut = Join-Path $startMenuPath "Programs\$name"
-    if (Test-Path $startShortcut) {
-        Remove-Item -Path $startShortcut -Force
-        Write-Host "Removed legacy Start Menu shortcut: $startShortcut"
-    }
+# FASE 1: Limpiar obsoletos
+$OBSOLETE = @("AGRAx Hub.lnk","ArgOS Core.lnk","ArgOS Launcher.lnk","Argos.lnk","Antigravity.lnk")
+foreach ($lnk in $OBSOLETE) {
+    $path = Join-Path $DESKTOP $lnk
+    if (Test-Path $path) { Remove-Item $path -Force; Write-Ok "Eliminado: $lnk" }
+    else { Write-Warn "No encontrado (omitido): $lnk" }
 }
 
-# 2. Create new, clean native shortcut on Desktop pointing directly to Argos.exe
-$targetExe = Join-Path $currentDir "dist\win-unpacked\Argos.exe"
-if (-not (Test-Path $targetExe)) {
-    Write-Error "Argos.exe not found at $targetExe. Please run 'npm run build:local' first."
-    Exit 1
-}
+# FASE 2: Validar
+$ok = $true
+if (-not (Test-Path $ARGOS_EXE))    { Write-Err "Argos.exe no encontrado"; $ok = $false }
+if (-not (Test-Path $LAUNCHER_CMD)) { Write-Err "ArgOS Launcher.cmd no encontrado"; $ok = $false }
+if (-not $ok) { Read-Host "Corregi los errores y volve a ejecutar"; exit 1 }
 
-$newShortcutPath = Join-Path $desktopPath "Argos.lnk"
-Write-Host "Creating new native desktop shortcut at: $newShortcutPath"
+# FASE 3: Crear accesos directos
+$lnk1 = $Shell.CreateShortcut("$DESKTOP\Argos.lnk")
+$lnk1.TargetPath = $ARGOS_EXE
+$lnk1.WorkingDirectory = "$WORKSPACE\dist\win-unpacked"
+$lnk1.IconLocation = "$ICON_SOURCE,0"
+$lnk1.Description = "ArgOS Hub - Cliente de escritorio Electron"
+$lnk1.Save()
+Write-Ok "Creado: Argos.lnk"
 
-$WshShell = New-Object -ComObject WScript.Shell
-$Shortcut = $WshShell.CreateShortcut($newShortcutPath)
-$Shortcut.TargetPath = $targetExe
-$Shortcut.WorkingDirectory = Join-Path $currentDir "dist\win-unpacked"
-$Shortcut.IconLocation = Join-Path $currentDir "resources\icon.ico"
-$Shortcut.Description = "Argos Desktop Companion"
-$Shortcut.Save()
+$lnk2 = $Shell.CreateShortcut("$DESKTOP\ArgOS Launcher.lnk")
+$lnk2.TargetPath = $LAUNCHER_CMD
+$lnk2.WorkingDirectory = $WORKSPACE
+$lnk2.IconLocation = "$ICON_SOURCE,0"
+$lnk2.Description = "ArgOS Launcher - Menu selector interactivo"
+$lnk2.Save()
+Write-Ok "Creado: ArgOS Launcher.lnk"
 
-Write-Host "SUCCESS: Native desktop shortcut created successfully pointing directly to: $targetExe"
+Write-Host ""
+Write-Host "  Setup completado. Podes probar desde el Escritorio." -ForegroundColor Green
+Read-Host "  Presiona Enter para salir"

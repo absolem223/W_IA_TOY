@@ -109,3 +109,62 @@ Ver `.env.example` para la lista completa. Las variables críticas son:
 2. Actualizar `HANDOFF.md` al finalizar cada sesión con cambios relevantes.
 3. Todo comando del proyecto usa `pnpm`. Nunca `npm`.
 4. `pnpm-lock.yaml` debe commitearse. `package-lock.json` no debe existir en el repo.
+
+---
+
+## Flujo de Desarrollo
+
+### Comandos por modo
+
+| Comando | Modo | Descripción |
+|---------|------|-------------|
+| `pnpm dev` | **Desarrollo** | `electron-vite dev` — HMR en renderer + watcher+restart automático en main al guardar |
+| `pnpm start` | **Producción** | Build completo (`electron-vite build`) y luego lanza `electron .` |
+| `pnpm run build` | Build manual | Solo compila, no lanza Electron |
+| `pnpm run shortcut` | Utilidad | Crea el acceso directo en el Escritorio del usuario |
+
+### Modo desarrollo (`pnpm dev`)
+
+`electron-vite dev` orquesta tres procesos en paralelo:
+- **Renderer**: Vite dev server con HMR — los cambios en `src/renderer/` se reflejan
+  en caliente sin reiniciar Electron.
+- **Main**: watcher que recompila `src/main/` y **reinicia automáticamente** el proceso
+  main de Electron al detectar cambios.
+- **Preload**: compilado y recargado junto con el main.
+
+> ⚠️ No es necesario instalar `electron-reload`, `concurrently` ni `wait-on` — electron-vite
+> los reemplaza por completo.
+
+### Modo producción (`pnpm start`)
+
+```bash
+pnpm start
+# equivale a:
+# node scripts/generate-version.js    ← prestart hook
+# cross-env NODE_ENV=production electron-vite build
+# electron .                          ← lee "main": "out/main/index.js"
+```
+
+El campo `"main": "out/main/index.js"` en `package.json` es el entry point que
+`electron .` usa para encontrar el bundle compilado por `electron-vite build`.
+
+### Shortcut en escritorio
+
+```powershell
+pnpm run shortcut
+# o directamente:
+powershell -ExecutionPolicy Bypass -File scripts/create-shortcut.ps1
+```
+
+Crea `Argos.lnk` en `%USERPROFILE%\Desktop` apuntando a `pnpm start`.
+Usa `WindowStyle = 7` (minimizado) para que la ventana de `cmd.exe` no sea visible.
+El script detecta la ruta del proyecto dinámicamente vía `$PSScriptRoot`.
+
+### Variables de entorno por modo
+
+| Variable | dev | start/build |
+|----------|-----|------------|
+| `NODE_ENV` | `development` | `production` |
+
+Inlineada en los bundles via `define` en `electron.vite.config.ts`.
+

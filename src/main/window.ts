@@ -25,14 +25,22 @@ export function createWindow(
     skipTaskbar: false,
     focusable: false,    // overlay mode: drag never steals focus from background apps
     hasShadow: false,    // we use CSS shadow on the widget
-    webPreferences: {
+      webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
       autoplayPolicy: 'no-user-gesture-required',
+      devTools: process.env.NODE_ENV === 'development',
     },
   })
+
+  // Close devtools if opened in production as fallback
+  if (process.env.NODE_ENV !== 'development') {
+    win.webContents.on('devtools-opened', () => {
+      win.webContents.closeDevTools()
+    })
+  }
 
   // Set the overlay level explicitly — the constructor only accepts a boolean.
   // 'floating' sits above normal windows but below system UI (taskbar, menu bar).

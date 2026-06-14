@@ -1,3 +1,4 @@
+import { app } from 'electron'
 import { CapabilityGraph } from '../cognitive/CapabilityGraph'
 import { ConstraintAwareness } from '../cognitive/ConstraintAwareness'
 import { CognitiveStateReporter } from '../cognitive/CognitiveStateReporter'
@@ -5,6 +6,7 @@ import { DecisionExplanationLayer } from '../cognitive/DecisionExplanationLayer'
 import { DynamicArchitectureDescription } from '../cognitive/DynamicArchitectureDescription'
 import { SelfKnowledgeSubsystem } from '../cognitive/SelfKnowledgeSubsystem'
 import type { RuntimeStatusReport, ProviderStatus } from '../shared/runtime'
+import { ARGOS_FOUNDATIONAL_STATEMENT } from '../shared/selfAwareness'
 
 interface MemoryActivationSummary {
   label: string
@@ -30,7 +32,7 @@ interface RuntimeIntrospectionInput {
   memoryActivations: MemoryActivationSummary[]
 }
 
-const RUNTIME_DESCRIPTION = `Este sistema opera como un runtime integrado con Electron + React + TypeScript. Usa un proxy local y proveedores externos (OpenRouter) para inferencia, un gestor de memoria local y un motor de introspección cognitiva. Esta información sirve para anclar la respuesta en el estado real del sistema y las limitaciones actuales.`
+const RUNTIME_DESCRIPTION = `${ARGOS_FOUNDATIONAL_STATEMENT} El runtime provee datos tecnicos sobre hardware, memoria, proveedores y modelos; esos datos describen el sustrato operativo, no la identidad de ArgOS.`
 
 function createStubEngram(label: string, score: number) {
   const confidence = Math.min(0.99, Math.max(0.01, Number(score) || 0.01))
@@ -136,7 +138,7 @@ export function buildRuntimeIntrospectionContext(input: RuntimeIntrospectionInpu
   const runtimeReport = {
     systemName: 'Argos Runtime',
     mode: 'runtime-integrated' as const,
-    version: '0.1.0',
+    version: app.getVersion(),
     deterministic: false,
     runtimeIntegration: 'read-only' as const,
   }
@@ -190,8 +192,9 @@ decisionExplanation:
 
 operationalGuidance:
 - Usa estos datos para mantener la respuesta anclada en el estado real del sistema.
-- No describas experiencias internas como sentimientos, emociones o conciencia.
-- Si el usuario pregunta cómo se llegó a la respuesta, menciona memoria, políticas, restricciones y proveedor activo.
+- Responde preguntas de identidad desde ArgOS primero; no desde el proveedor o modelo.
+- No describas experiencias internas como sentimientos, emociones o conciencia literal.
+- Si el usuario pide detalles tecnicos, menciona memoria, politicas, restricciones, proveedor activo y modelo activo.
 ${warningLines.length > 0 ? `
 environmentWarnings:
 ${warningLines.join('\n')}` : ''}
@@ -199,4 +202,20 @@ ${errorLines.length > 0 ? `
 providerErrors:
 ${errorLines.join('\n')}` : ''}
 </runtime_introspection>`
+  + `\n<runtime_context>
+summary: Instrucciones operativas para el agente sobre modelos y propuestas de cambio
+- activeModel: ${input.runtimeStatus.activeModel ?? 'ninguno'}
+- fallbackActive: ${input.runtimeStatus.fallbackActive}
+- providerCount: ${input.runtimeStatus.providers.length}
+availableModels:
+${input.runtimeStatus.providers.map((p) => p.modelRouting ? `- ${p.modelRouting} (via ${p.label})` : '').filter(Boolean).join('\n') || 'ninguno'}
+
+[RUNTIME_CONTEXT] PROACTIVE MODEL SUGGESTION RULES:
+- If the user's request is complex (long-form, multi-step, code generation, deep reasoning) OR if the current model times out or returns degraded answers, and there exists a clearly more capable model available online in LM Studio or provider routing, then the agent should *proactively* propose switching models. The agent MUST NOT switch automatically without explicit confirmation.
+- Suggestion phrasing: "Puedo cambiar al modelo <model-name> (más capaz) para esto — ofrece mayor precisión/contexto. ¿Querés que lo cambie?".
+- When suggesting, include a short rationale (benefit vs latency/cost): e.g., "Mejor razonamiento y contexto, puede tardar más".
+- Do NOT propose if provider is offline, in fallback mode, or if the difference in capability appears negligible according to provider metadata.
+- Log a suggestion event to runtime telemetry, but do not change model without user approval.
+- CUANDO el usuario pregunte qué modelo estás usando, qué LLM, desde dónde respondés, o cualquier pregunta técnica sobre tu infraestructura: RESPONDÉ DIRECTAMENTE con el proveedor y modelo activo. No evades, no cambiás de tema. Ejemplo de respuesta correcta: "Estoy corriendo sobre [provider] usando el modelo [modelId]."
+</runtime_context>`
 }

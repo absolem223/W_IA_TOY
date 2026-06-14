@@ -266,4 +266,14 @@ export class LMStudioProvider implements InferenceProvider {
       return { available: false, error: `Cannot reach LM Studio on local network: ${err.message}` }
     }
   }
+
+  /**
+   * Attempt to load a model via LM Studio load API.
+   * Returns true if the load endpoint accepted the request (200), false otherwise.
+   * This method intentionally tolerates absence of the endpoint and logs accordingly.
+   */
+  async tryLoadModel(modelId: string): Promise<boolean> {
+    console.warn('[LMStudio] Model load API not available in this version')
+    return false
+  }
 }

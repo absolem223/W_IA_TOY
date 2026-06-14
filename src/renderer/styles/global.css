@@ -266,6 +266,63 @@
   --space-xl: 20px;
 }
 
+/* Toast container for short LLM status alerts */
+.toast-container {
+  position: absolute;
+  right: 12px;
+  top: 72px; /* under header */
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: var(--z-popup);
+  pointer-events: none; /* clicks pass through, toasts are passive */
+}
+.toast {
+  background: rgba(20,24,32,0.95);
+  color: var(--text);
+  padding: 10px 14px;
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+  font-size: 13px;
+  pointer-events: auto;
+  opacity: 0.98;
+}
+
+/* System message styling in the message list */
+.message--system {
+  opacity: 0.9;
+}
+.message--system .message__bubble-wrapper {
+  background: transparent;
+  border: 1px dashed rgba(255,255,255,0.04);
+}
+.message--system .message__content {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Model Setup Modal */
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+}
+.modal {
+  background: var(--bg-panel);
+  padding: 18px;
+  border-radius: 12px;
+  width: 420px;
+  box-shadow: var(--shadow-base);
+  color: var(--text);
+}
+.model-list { max-height: 220px; overflow: auto; margin-top: 8px }
+.model-item { padding: 8px; border-radius: 8px; cursor: pointer }
+.model-item.selected { background: rgba(107,140,174,0.12) }
+
 /* ─── Root ───────────────────────────────────────────── */
 html, body {
   width: 100vw;
@@ -861,11 +918,104 @@ html, body {
 .typing-indicator span:nth-child(2) { animation-delay: 0.15s; }
 .typing-indicator span:nth-child(3) { animation-delay: 0.30s; }
 
+/* ─── Thinking Bubble ────────────────────────────────── */
+/* Aparece entre chatState='thinking' (antes del primer token).
+   Usa el mismo contenedor .message--assistant para alineación coherente
+   pero añade .message--thinking para estilos específicos.             */
+.message--thinking .message__bubble-wrapper {
+  display: block;
+}
+.thinking-bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--bg-ai);
+  border: 1px solid rgba(232, 185, 113, 0.18); /* amber tint — estado de procesamiento */
+  border-radius: 14px;
+  border-bottom-left-radius: 4px;
+  animation:
+    msgInTransform var(--dur-msg-in)   var(--ease-spring) 60ms both,
+    msgInOpacity   var(--dur-msg-fade) ease-out           60ms both;
+}
+.thinking-bubble__text {
+  font-size: 13px;
+  color: rgba(232, 185, 113, 0.75); /* amber suave — no tan saturado */
+  font-style: italic;
+  letter-spacing: 0.01em;
+}
+.thinking-bubble__dot {
+  display: inline-block;
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: #E8B971;
+  opacity: 0.5;
+  animation: thinkingDotBounce 1.2s var(--ease-in-out) infinite;
+  flex-shrink: 0;
+}
+.thinking-bubble__dot:nth-child(3) { animation-delay: 0.18s; }
+.thinking-bubble__dot:nth-child(4) { animation-delay: 0.36s; }
+
+@keyframes thinkingDotBounce {
+  0%, 70%, 100% { transform: translateY(0);    opacity: 0.35; }
+  35%            { transform: translateY(-4px); opacity: 0.9;  }
+}
+
+/* ─── Voice Message Badge ────────────────────────────── */
+/* Micro-badge que aparece debajo del bubble para mensajes de voz.
+   Posicionado absoluto respecto al message__bubble-wrapper.        */
+.message__voice-badge {
+  display: block;
+  font-size: 10px;
+  line-height: 1;
+  margin-top: 4px;
+  margin-right: 4px;
+  text-align: right;
+  opacity: 0.45;
+  user-select: none;
+  transition: opacity var(--dur-fast) var(--ease-micro);
+}
+.message__bubble-wrapper:hover .message__voice-badge {
+  opacity: 0.75;
+}
+
+/* ─── Model Info Badge ─────────────────────────────── */
+.message__model-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 9.5px;
+  line-height: 1;
+  margin-top: 5px;
+  margin-left: 4px;
+  color: var(--muted);
+  opacity: 0.5;
+  user-select: none;
+  transition: opacity var(--dur-fast) var(--ease-micro);
+}
+.message__bubble-wrapper:hover .message__model-info {
+  opacity: 0.85;
+}
+.model-info__tag {
+  font-weight: 500;
+}
+.model-info__time {
+  opacity: 0.8;
+}
+.model-info__fallback-reason {
+  color: #E8B971;
+  cursor: help;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+
 /* ─── Chat Input ─────────────────────────────────────── */
 .chat-input {
   position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
   flex: 1;
   min-width: 0;
@@ -928,6 +1078,21 @@ html, body {
   backdrop-filter: blur(8px);
 }
 
+.proxy-badge--connecting {
+  color: #E8B971;
+  border-color: rgba(232, 185, 113, 0.3);
+  background: rgba(30, 25, 10, 0.7);
+  backdrop-filter: blur(8px);
+  animation: badgeIn var(--dur-fast) var(--ease-out), badgePulse 1.5s infinite alternate;
+}
+
+.proxy-badge--connected {
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.3);
+  background: rgba(10, 30, 15, 0.7);
+  backdrop-filter: blur(8px);
+}
+
 .proxy-badge--memory {
   color: rgba(160, 200, 255, 0.85);
   border-color: rgba(120, 160, 255, 0.25);
@@ -951,6 +1116,45 @@ html, body {
 @keyframes badgeIn {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* Wrapper columnar para botón mic + label de estado.
+   Se reserva siempre el espacio del label para evitar saltos de layout.
+   align-items: flex-end en .chat-input alinea el wrapper al fondo junto
+   con el botón enviar (38px), de modo que ambos botones quedan a la misma altura. */
+.chat-input__mic-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  min-width: 38px;
+  /* padding-bottom reserva el espacio del label incluso en idle */
+  padding-bottom: 0;
+}
+
+.chat-input__mic-label {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  margin-top: 2px;
+  text-align: center;
+  user-select: none;
+  /* La animación solo aplica cuando el span se vuelve visible */
+  transition: opacity 0.15s var(--ease-out);
+}
+
+/* Estado visible: suave fade-in */
+.chat-input__mic-label[style*="visible"] {
+  animation: micLabelIn 0.18s var(--ease-out) both;
+}
+
+@keyframes micLabelIn {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 0.8; transform: translateY(0); }
 }
 
 .chat-input__mic {
@@ -977,11 +1181,23 @@ html, body {
   animation: micPulse 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   background: rgba(255, 74, 74, 0.1);
 }
+/* Estado busy (transcribing / processing / generating) */
+.chat-input__mic--busy {
+  color: rgba(var(--accent-rgb), 0.55);
+  cursor: not-allowed;
+  animation: micBusySpin 1.8s linear infinite;
+}
 
 @keyframes micPulse {
   0% { box-shadow: 0 0 0 0 rgba(255, 74, 74, 0.4); transform: scale(0.95); }
   70% { box-shadow: 0 0 0 10px rgba(255, 74, 74, 0); transform: scale(1.05); }
   100% { box-shadow: 0 0 0 0 rgba(255, 74, 74, 0); transform: scale(0.95); }
+}
+
+@keyframes micBusySpin {
+  0%   { opacity: 0.4; transform: rotate(0deg); }
+  50%  { opacity: 0.8; transform: rotate(180deg); }
+  100% { opacity: 0.4; transform: rotate(360deg); }
 }
 
 .chat-input__send {

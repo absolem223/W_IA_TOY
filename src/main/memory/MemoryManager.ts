@@ -19,6 +19,7 @@ import { CognitiveLayer } from './CognitiveLayer'
 import { assembleMemoryPreamble } from './retrieval'
 import { dumpMemoryState, integrityCheck } from './debug'
 import { reconcileMemory } from './reconciliation'
+import { buildCompactSelfAwarenessPrompt } from '../../shared/selfAwareness'
 
 export class MemoryManager {
   private baseDir: string
@@ -284,6 +285,32 @@ export class MemoryManager {
   /** Dump full memory state to logs. */
   async dumpState(): Promise<void> {
     await dumpMemoryState(this.baseDir, this.log)
+  }
+
+  private get systemIdentityPath(): string {
+    return join(this.baseDir, 'system_identity.txt')
+  }
+
+  public async getSystemIdentity(): Promise<string> {
+    const defaultPrompt = buildCompactSelfAwarenessPrompt()
+    try {
+      return await fs.readFile(this.systemIdentityPath, 'utf-8')
+    } catch {
+      return defaultPrompt
+    }
+  }
+
+  public async setSystemIdentity(content: string): Promise<void> {
+    await fs.writeFile(this.systemIdentityPath, content, 'utf-8')
+    this.onSyncCallback?.()
+  }
+
+  public async resetSystemIdentity(): Promise<string> {
+    try {
+      await fs.unlink(this.systemIdentityPath)
+    } catch {}
+    this.onSyncCallback?.()
+    return this.getSystemIdentity()
   }
 
   // ── Private ──

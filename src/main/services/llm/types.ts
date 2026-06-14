@@ -50,6 +50,7 @@ export interface InferenceProvider {
 export interface LLMSettings {
   providerId: string
   modelId: string
+  contextWindowTokens: number
   allowAutomaticFallback: boolean
   recoveryExpiryMs: number
 }
@@ -67,7 +68,8 @@ export const DEFAULT_LLM_SETTINGS: LLMSettings = {
   // This default is used only if llm-config.json doesn't exist yet.
   // At runtime LMStudioProvider.resolveModel() will auto-correct to whatever model
   // is actually loaded in LM Studio, so this value is just a starting suggestion.
-  modelId: 'llama-3.2-3b-instruct',
+  modelId: 'gemma-3-12b-instruct',
+  contextWindowTokens: 4096,
   allowAutomaticFallback: false,
   recoveryExpiryMs: 45 * 60 * 1000, // 45 minutes
 }

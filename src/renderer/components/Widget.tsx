@@ -4,6 +4,10 @@ import { ChatPanel } from './ChatPanel'
 import { MemoryPanel } from './MemoryPanel'
 import { ApprovalOverlay } from './ApprovalOverlay'
 import { useWidgetLayers } from '../hooks/useWidgetLayers'
+import { Toasts } from './Toast'
+import { ModelSetupModal } from './ModelSetupModal'
+import type { VersionInfo } from '../../shared/versionTypes'
+
 
 const HEIGHT_CLOSED = 60
 const HEIGHT_OPEN   = 540
@@ -27,7 +31,13 @@ function useBgContext(): 'dark' | 'light' {
 
 export function Widget(): React.ReactElement {
   const [isOpen, setIsOpen]       = useState(false)
+  const [showModelSetup, setShowModelSetup] = useState(false)
   const [view, setView]           = useState<'chat' | 'memory'>('chat')
+  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null)
+
+  useEffect(() => {
+    window.electronAPI.getVersionInfo().then(setVersionInfo).catch(console.error)
+  }, [])
   const closingTimer              = useRef<ReturnType<typeof setTimeout> | null>(null)
   const bgContext                 = useBgContext()
   const layers                    = useWidgetLayers()
@@ -56,6 +66,17 @@ export function Widget(): React.ReactElement {
     setView(v => v === 'memory' ? 'chat' : 'memory')
   }, [])
 
+  useEffect(() => {
+    if (typeof window.electronAPI.onShowBios === 'function') {
+      const off = window.electronAPI.onShowBios(() => {
+        console.log('[BIOS] Modal triggered')
+        setShowModelSetup(true)
+      })
+      return () => off()
+    }
+    return () => {}
+  }, [])
+
   return (
     <div
       className="widget"
@@ -66,7 +87,7 @@ export function Widget(): React.ReactElement {
       {/* El header siempre visible y siempre clickeable.
           Electron maneja el resize de ventana — no necesitamos
           bloquear pointer-events en CSS para "ocultar" el área. */}
-      <WidgetHeader isOpen={isOpen} onToggle={toggle} onMemoryToggle={toggleMemory} memoryActive={view === 'memory'} />
+      <WidgetHeader isOpen={isOpen} onToggle={toggle} onMemoryToggle={toggleMemory} memoryActive={view === 'memory'} versionInfo={versionInfo} />
 
       {/* Panel de contenido: solo se monta cuando el widget está abierto.
           pointer-events:none durante la animación de cierre para evitar
@@ -79,6 +100,9 @@ export function Widget(): React.ReactElement {
           }
         </div>
       )}
+      {/* Global toasts for short LLM status alerts */}
+      <Toasts />
+      {showModelSetup && <ModelSetupModal versionInfo={versionInfo} onClose={() => setShowModelSetup(false)} />}
       <ApprovalOverlay />
     </div>
   )

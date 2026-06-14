@@ -49,14 +49,18 @@ export function useVoice(): UseVoiceReturn {
     })
     controllerRef.current = controller
 
+    console.info('[VOICE_RENDERER] AudioPlaybackController instantiated')
+
     // ── Fetch initial status ──
     window.electronAPI.voiceGetStatus().then(status => {
       if (!isMountedRef.current) return
       setVoiceState(status.state as VoiceState)
       setEnabled(status.enabled)
       setMuted(status.muted)
+      console.info('[VOICE_RENDERER] Sending renderer-ready to main')
       window.electronAPI.voiceRendererReady?.()
     }).catch(() => {
+      console.info('[VOICE_RENDERER] voiceGetStatus failed, still signaling renderer-ready')
       window.electronAPI.voiceRendererReady?.()
     })
 
@@ -89,13 +93,17 @@ export function useVoice(): UseVoiceReturn {
       if (!isMountedRef.current) return
       try {
         const origin = (cmd as any).originChatRequestId as number | undefined
-        if (typeof origin === 'number' && activeChatRequestIdRef.current !== origin) {
+        // If we have an active chat id, only accept matching-origin chunks.
+        // If we don't yet have an active chat id (null), accept the first chunk
+        // to avoid drop-on-start race conditions.
+        if (typeof origin === 'number' && activeChatRequestIdRef.current !== null && activeChatRequestIdRef.current !== origin) {
           console.info(`[VOICE_RENDERER] Ignoring stale play-text for origin ${origin} (active ${activeChatRequestIdRef.current})`)
           return
         }
       } catch (e) {
         // If anything fails, fall back to playing
       }
+      console.info('[VOICE_RENDERER] Received play-text command', cmd.requestId)
       playWithWebSpeech(cmd.requestId, cmd.text, cmd.voiceId, cmd.speed)
     })
 

@@ -34,12 +34,23 @@ export function DebugOverlay({ usedMemories, activeTopic }: Props): React.ReactE
     const cleanupContext = window.electronAPI.onContextObservability((metric) => setObservability(metric))
     const cleanupPrompt = window.electronAPI.onPromptPreview((preview) => setPromptPreview(preview))
     const cleanupVoiceState = window.electronAPI.onVoiceStateChanged((event) => setTtsState(event.state))
+    const cleanupLLM = window.electronAPI.onLLMStatus((status) => {
+      setRuntimeStatus((prev) => prev ? {
+        ...prev,
+        inferenceProvider: status.providerId,
+        activeModel: status.modelId,
+      } : {
+        inferenceProvider: status.providerId,
+        activeModel: status.modelId,
+      } as any)
+    })
 
     return () => {
       cleanupRuntime()
       cleanupContext()
       cleanupPrompt()
       cleanupVoiceState()
+      cleanupLLM()
     }
   }, [])
 

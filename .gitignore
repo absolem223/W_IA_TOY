@@ -33,3 +33,7 @@ vendor/
 *.bin
 *.dll
 *.exe
+
+# Auto-generated build metadata
+src/shared/versionInfo.ts
+

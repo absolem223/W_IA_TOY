@@ -35,10 +35,11 @@ pnpm run rebuild
 | Comando | Descripción |
 |---------|-------------|
 | `pnpm install` | Instalar dependencias |
-| `pnpm run dev` | Modo desarrollo (hot-reload) |
-| `pnpm run build` | Build de producción |
-| `pnpm start` | Arrancar la aplicación |
-| `pnpm run rebuild` | Recompilar módulos nativos |
+| `pnpm run dev` | Modo desarrollo (hot-reload) con electron-vite |
+| `pnpm run build` | Compila Main, Preload y Renderer en producción (`out/`) |
+| `pnpm start` | Compila en producción y luego inicia la aplicación (`electron .`) |
+| `pnpm run shortcut` | Crea un acceso directo en el Escritorio apuntando al proyecto |
+| `pnpm run rebuild` | Recompila módulos nativos (`better-sqlite3`) |
 
 ## Configuración
 
